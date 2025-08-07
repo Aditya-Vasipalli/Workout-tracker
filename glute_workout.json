@@ -1,0 +1,36 @@
+{
+  "name": "Glute Power Workout",
+  "description": "A comprehensive glute-focused workout for building strength and shape",
+  "exercises": [
+    {
+      "exercise": "glute_bridge",
+      "sets": 3,
+      "reps": 15,
+      "rest": 45
+    },
+    {
+      "exercise": "hip_thrust",
+      "sets": 3,
+      "reps": 12,
+      "rest": 60
+    },
+    {
+      "exercise": "bulgarian_split_squat",
+      "sets": 2,
+      "reps": 10,
+      "rest": 45
+    },
+    {
+      "exercise": "donkey_kick",
+      "sets": 2,
+      "reps": 15,
+      "rest": 30
+    },
+    {
+      "exercise": "fire_hydrant",
+      "sets": 2,
+      "reps": 12,
+      "rest": 30
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+# AI Workout Tracker Requirements
+# Enhanced version with 25+ exercises
+
+# Core packages for pose detection
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+numpy>=1.21.0
+pyttsx3>=2.90
+
+# Additional useful packages  
+pillow>=8.0.0
+matplotlib>=3.5.0
+
+# Installation commands:
+# For Python 3.10-3.12 (recommended):
+# py -3.10 -m pip install -r requirements.txt
+#
+# For Python 3.13+ (MediaPipe not supported):
+# py -3.13 -m pip install opencv-python numpy pyttsx3

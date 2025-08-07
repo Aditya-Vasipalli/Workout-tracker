@@ -1,0 +1,30 @@
+{
+  "name": "Upper Body Blast",
+  "description": "Focus on biceps, shoulders, and chest for upper body strength",
+  "exercises": [
+    {
+      "exercise": "bicep_curls",
+      "sets": 3,
+      "reps": 12,
+      "rest": 45
+    },
+    {
+      "exercise": "hammer_curl",
+      "sets": 2,
+      "reps": 10,
+      "rest": 45
+    },
+    {
+      "exercise": "shoulder_press",
+      "sets": 3,
+      "reps": 10,
+      "rest": 60
+    },
+    {
+      "exercise": "push_ups",
+      "sets": 2,
+      "reps": 8,
+      "rest": 45
+    }
+  ]
+}

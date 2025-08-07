@@ -1,0 +1,30 @@
+{
+  "name": "Core Stability Challenge",
+  "description": "Build core strength and stability with targeted exercises",
+  "exercises": [
+    {
+      "exercise": "plank",
+      "sets": 3,
+      "reps": 30,
+      "rest": 45
+    },
+    {
+      "exercise": "leg_raise",
+      "sets": 3,
+      "reps": 12,
+      "rest": 45
+    },
+    {
+      "exercise": "russian_twist",
+      "sets": 2,
+      "reps": 20,
+      "rest": 30
+    },
+    {
+      "exercise": "bird_dog",
+      "sets": 2,
+      "reps": 10,
+      "rest": 30
+    }
+  ]
+}
