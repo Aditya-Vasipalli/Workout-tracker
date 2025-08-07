@@ -45,9 +45,24 @@ def run_json_workout():
         else:
             filename = choice
         
-        # Load and run workout
+        # Load workout data first to show camera guidance
         workout_data = tracker.load_workout_from_json(filename)
         if workout_data:
+            # Ask about camera setup
+            setup_camera = input("\n📹 Do you want camera positioning help? (y/n): ").strip().lower()
+            if setup_camera == 'y':
+                print("\n🎯 Camera setup options:")
+                print("1. 📹 Select different camera")
+                print("2. 🎯 Test camera view")
+                print("3. ▶️  Start workout now")
+                
+                camera_choice = input("Choose (1-3): ").strip()
+                if camera_choice == '1':
+                    tracker.select_camera()
+                elif camera_choice == '2':
+                    tracker.test_camera_view()
+            
+            # Run the workout
             tracker.run_workout_program(workout_data)
         
     except ImportError as e:

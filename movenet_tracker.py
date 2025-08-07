@@ -26,6 +26,9 @@ class MoveNetWorkoutTracker:
         self.tts_engine = None
         self.setup_tts()
         
+        # Camera selection
+        self.camera_index = 0  # Default to laptop camera
+        
         # Exercise tracking
         self.rep_count = 0
         self.state = 'down'
@@ -453,6 +456,178 @@ class MoveNetWorkoutTracker:
             thread.daemon = True
             thread.start()
     
+    def show_camera_placement_guide(self, exercise_type):
+        """Show camera placement guide for specific exercise"""
+        exercise = self.exercises.get(exercise_type, {})
+        exercise_name = exercise.get('name', exercise_type)
+        
+        print(f"\n📹 CAMERA PLACEMENT GUIDE for {exercise_name}")
+        print("=" * 50)
+        
+        # Exercise-specific guidance
+        if exercise_type in ['glute_bridge', 'hip_thrust']:
+            print("📱 SIDE VIEW SETUP:")
+            print("   📍 Place phone on SIDE (left or right)")
+            print("   📐 Phone should be at hip level")
+            print("   📏 Distance: 3-4 feet away")
+            print("   👁️  Should see: full hip, knee, ankle")
+            print("   ✅ Good for: hip extension tracking")
+            
+        elif exercise_type in ['leg_raise', 'russian_twist']:
+            print("📱 SIDE VIEW SETUP:")
+            print("   📍 Place phone on SIDE (left or right)")
+            print("   📐 Phone at floor level or slightly elevated")
+            print("   📏 Distance: 4-5 feet away")
+            print("   👁️  Should see: full body from head to feet")
+            print("   ✅ Good for: leg movement tracking")
+            
+        elif exercise_type in ['bicep_curls', 'shoulder_press']:
+            print("📱 FRONT VIEW SETUP:")
+            print("   📍 Place phone FACING you")
+            print("   📐 Phone at chest/shoulder level")
+            print("   📏 Distance: 4-6 feet away")
+            print("   👁️  Should see: full upper body and arms")
+            print("   ✅ Good for: arm movement tracking")
+            
+        elif exercise_type in ['squat', 'bulgarian_split_squat']:
+            print("📱 SIDE VIEW SETUP:")
+            print("   📍 Place phone on SIDE (left or right)")
+            print("   📐 Phone at knee level")
+            print("   📏 Distance: 5-6 feet away")
+            print("   👁️  Should see: full body, especially legs")
+            print("   ✅ Good for: knee/hip angle tracking")
+            
+        elif exercise_type in ['plank', 'push_up']:
+            print("📱 SIDE VIEW SETUP:")
+            print("   📍 Place phone on SIDE (left or right)")
+            print("   📐 Phone at torso level")
+            print("   📏 Distance: 4-5 feet away")
+            print("   👁️  Should see: full body profile")
+            print("   ✅ Good for: body alignment tracking")
+            
+        else:
+            print("📱 GENERAL SETUP:")
+            print("   📍 Place phone for best view of moving parts")
+            print("   📐 Match phone level to exercise focus area")
+            print("   📏 Distance: 4-6 feet away")
+            print("   👁️  Ensure all key joints are visible")
+        
+        print("\n🎯 KEY TIPS:")
+        print("   📱 Use phone LANDSCAPE mode")
+        print("   💡 Good lighting on your body")
+        print("   🔄 Test camera view before starting")
+        print("   📐 Keep phone steady (use stand/prop)")
+        print("   👥 Avoid background clutter")
+        
+        input("\n✅ Press Enter when camera is positioned...")
+
+    def test_camera_view(self):
+        """Live camera test to check positioning"""
+        print("\n📹 CAMERA VIEW TEST")
+        print("=" * 30)
+        print("🎯 Check if all required keypoints are visible")
+        print("📱 Adjust position until pose detection works well")
+        print("❌ Press 'q' to quit test")
+        
+        cap = cv2.VideoCapture(self.camera_index)
+        if not cap.isOpened():
+            print(f"❌ Could not open camera {self.camera_index}")
+            return
+            
+        # Set camera properties for better quality
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+        
+        print("📹 Camera test started. Position yourself and check the view...")
+        
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            # Get pose landmarks
+            keypoints = self.get_pose_landmarks(frame)
+            
+            if keypoints is not None:
+                # Draw pose
+                annotated_image = self.draw_keypoints(frame, keypoints)
+                
+                # Add status text
+                cv2.putText(annotated_image, "CAMERA TEST - Press 'q' to quit", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                # Count visible keypoints
+                visible_points = sum(1 for kp in keypoints if kp[2] > self.confidence_threshold)
+                cv2.putText(annotated_image, f"Visible keypoints: {visible_points}/17", 
+                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                
+                if visible_points >= 10:
+                    cv2.putText(annotated_image, "GOOD POSITION!", 
+                               (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                else:
+                    cv2.putText(annotated_image, "ADJUST POSITION", 
+                               (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    
+                cv2.imshow('Camera Test', annotated_image)
+            else:
+                cv2.putText(frame, "NO POSE DETECTED", 
+                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                cv2.imshow('Camera Test', frame)
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        
+        cap.release()
+        cv2.destroyAllWindows()
+        print("✅ Camera test completed")
+
+    def select_camera(self):
+        """Let user select camera source"""
+        print("\n📹 Camera Selection:")
+        print("1. 💻 Laptop Camera (Default)")
+        print("2. 📱 Phone Camera (Iriun/DroidCam)")
+        print("3. 🔧 Custom Camera Index")
+        
+        try:
+            choice = input("\nSelect camera (1-3): ").strip()
+            
+            if choice == '1':
+                self.camera_index = 0
+                print("✅ Using laptop camera")
+            elif choice == '2':
+                # Try common phone camera indices
+                for i in [1, 2, 3]:
+                    cap = cv2.VideoCapture(i)
+                    if cap.isOpened():
+                        cap.release()
+                        self.camera_index = i
+                        print(f"✅ Found phone camera at index {i}")
+                        return
+                print("❌ No phone camera found. Make sure Iriun is connected.")
+                print("📱 Using laptop camera as fallback")
+                self.camera_index = 0
+            elif choice == '3':
+                idx = int(input("Enter camera index (0-5): "))
+                cap = cv2.VideoCapture(idx)
+                if cap.isOpened():
+                    cap.release()
+                    self.camera_index = idx
+                    print(f"✅ Using camera index {idx}")
+                else:
+                    print(f"❌ Camera {idx} not available. Using default.")
+                    self.camera_index = 0
+            else:
+                print("❌ Invalid choice. Using laptop camera.")
+                self.camera_index = 0
+                
+        except ValueError:
+            print("❌ Invalid input. Using laptop camera.")
+            self.camera_index = 0
+        except Exception as e:
+            print(f"❌ Camera selection error: {e}")
+            self.camera_index = 0
+
     def preprocess_image(self, image):
         """Preprocess image for MoveNet"""
         # Resize to 256x256 (MoveNet Thunder input size)
@@ -599,6 +774,9 @@ class MoveNetWorkoutTracker:
         print(f"📋 {exercise['description']}")
         print(f"🎯 Target: {target_reps} reps")
         
+        # Show camera placement guide
+        self.show_camera_placement_guide(exercise_type)
+        
         # Countdown
         for i in range(3, 0, -1):
             print(f"Starting in {i}...")
@@ -614,10 +792,18 @@ class MoveNetWorkoutTracker:
         self.angle_history = []
         
         # Open camera
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(self.camera_index)
         if not cap.isOpened():
-            print("❌ Could not open camera")
-            return
+            print(f"❌ Could not open camera {self.camera_index}")
+            # Try fallback to default camera
+            if self.camera_index != 0:
+                print("🔄 Trying default camera...")
+                cap = cv2.VideoCapture(0)
+                if not cap.isOpened():
+                    print("❌ No cameras available")
+                    return
+            else:
+                return
         
         print("📹 Camera started. Press 'q' to quit, 's' to skip to next rep")
         
@@ -809,10 +995,12 @@ def main():
         print("3. 📚 Browse Exercises by Category")
         print("4. 📄 Create Sample Workout")
         print("5. 🔍 Search Exercise")
-        print("6. ❌ Quit")
+        print("6. 📹 Select Camera")
+        print("7. 🎯 Test Camera View")
+        print("8. ❌ Quit")
         print()
         
-        choice = input("Enter your choice (1-6): ").strip()
+        choice = input("Enter your choice (1-8): ").strip()
         
         if choice == '1':
             # Single exercise mode
@@ -870,11 +1058,19 @@ def main():
                 print("❌ No exercises found")
         
         elif choice == '6':
+            # Camera selection
+            tracker.select_camera()
+        
+        elif choice == '7':
+            # Camera view test
+            tracker.test_camera_view()
+        
+        elif choice == '8':
             print("👋 Goodbye! Stay fit!")
             break
         
         else:
-            print("❌ Invalid choice. Please enter 1-6.")
+            print("❌ Invalid choice. Please enter 1-8.")
 
 if __name__ == "__main__":
     main()
