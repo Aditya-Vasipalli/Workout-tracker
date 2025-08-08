@@ -13,6 +13,7 @@ import threading
 import math
 import json
 import os
+from datetime import datetime
 
 class MoveNetWorkoutTracker:
     def __init__(self):
@@ -36,6 +37,26 @@ class MoveNetWorkoutTracker:
         self.min_rep_time = 1.2
         self.angle_history = []
         self.confidence_threshold = 0.3
+        
+        # Workout session tracking
+        self.current_session = {
+            'start_time': None,
+            'exercises': [],
+            'total_duration': 0,
+            'session_id': None
+        }
+        self.current_exercise_data = {
+            'exercise_name': '',
+            'exercise_type': '',
+            'target_reps': 0,
+            'completed_reps': 0,
+            'sets_completed': 0,
+            'target_sets': 0,
+            'form_scores': [],
+            'start_time': None,
+            'end_time': None,
+            'duration': 0
+        }
         
         # Keypoint indices for MoveNet (17 keypoints)
         self.KEYPOINT_DICT = {
@@ -423,38 +444,93 @@ class MoveNetWorkoutTracker:
             print("Falling back to basic tracking...")
     
     def setup_tts(self):
-        """Initialize text-to-speech"""
+        """Initialize text-to-speech with robust Windows implementation"""
         try:
-            self.tts_engine = pyttsx3.init()
-            voices = self.tts_engine.getProperty('voices')
+            # Test if PowerShell TTS is available (more reliable on Windows)
+            import subprocess
+            test_command = '''
+            Add-Type -AssemblyName System.Speech;
+            $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer;
+            $synth.Speak("Test");
+            '''
             
-            # Find female voice
-            for voice in voices:
-                if 'zira' in voice.name.lower() or 'female' in voice.name.lower():
-                    self.tts_engine.setProperty('voice', voice.id)
-                    break
+            result = subprocess.run([
+                "powershell", "-Command", test_command
+            ], capture_output=True, text=True, timeout=5)
             
-            self.tts_engine.setProperty('rate', 150)
-            print("✅ TTS initialized")
-            
+            if result.returncode == 0:
+                self.tts_method = 'powershell'
+                self.tts_working = True
+                print("✅ PowerShell TTS initialized")
+            else:
+                raise Exception("PowerShell TTS test failed")
+                
         except Exception as e:
-            print(f"⚠️ TTS setup failed: {e}")
+            # Fallback to pyttsx3
+            try:
+                self.tts_engine = pyttsx3.init(driverName='sapi5')
+                voices = self.tts_engine.getProperty('voices')
+                
+                # Find female voice
+                for voice in voices:
+                    if 'zira' in voice.name.lower() or 'female' in voice.name.lower():
+                        self.tts_engine.setProperty('voice', voice.id)
+                        break
+                
+                self.tts_engine.setProperty('rate', 150)
+                self.tts_method = 'pyttsx3'
+                self.tts_working = True
+                print("✅ pyttsx3 TTS initialized (fallback)")
+                
+            except Exception as e2:
+                print(f"⚠️ TTS setup failed: {e2}")
+                self.tts_engine = None
+                self.tts_method = 'none'
+                self.tts_working = False
+        
+        self.tts_lock = threading.Lock()
     
     def speak(self, text):
-        """Non-blocking text-to-speech"""
-        def _speak():
+        """
+        Robust text-to-speech with fresh engine for each call
+        """
+        def powershell_tts():
+            """Use Windows PowerShell TTS (most reliable)"""
             try:
-                if self.tts_engine:
-                    self.tts_engine.say(text)
-                    self.tts_engine.runAndWait()
-            except:
-                pass
+                import subprocess
+                ps_command = f'''
+                Add-Type -AssemblyName System.Speech;
+                $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer;
+                $synth.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Female);
+                $synth.Rate = 0;
+                $synth.Speak("{text}");
+                '''
+                
+                subprocess.run([
+                    "powershell", "-Command", ps_command
+                ], capture_output=True, text=True, timeout=10)
+                
+            except Exception as e:
+                print(f"⚠️ PowerShell TTS error: {e}")
+                try:
+                    import winsound
+                    winsound.Beep(800, 200)
+                except:
+                    pass
         
-        print(f"🗣️ {text}")
-        if self.tts_engine:
-            thread = threading.Thread(target=_speak)
+        print(f"� Speaking: {text}")
+        
+        if self.tts_working:
+            thread = threading.Thread(target=powershell_tts)
             thread.daemon = True
             thread.start()
+        else:
+            print("⚠️ TTS not available - using visual feedback only")
+            try:
+                import winsound
+                winsound.Beep(800, 100)  # Simple beep fallback
+            except:
+                pass
     
     def show_camera_placement_guide(self, exercise_type):
         """Show camera placement guide for specific exercise"""
@@ -628,6 +704,208 @@ class MoveNetWorkoutTracker:
             print(f"❌ Camera selection error: {e}")
             self.camera_index = 0
 
+    def start_workout_session(self, session_name="Custom Workout"):
+        """Start a new workout session"""
+        self.current_session = {
+            'session_name': session_name,
+            'start_time': datetime.now(),
+            'exercises': [],
+            'total_duration': 0,
+            'session_id': datetime.now().strftime("%Y%m%d_%H%M%S")
+        }
+        print(f"📊 Started workout session: {session_name}")
+
+    def start_exercise_tracking(self, exercise_type, target_reps, target_sets=1):
+        """Start tracking a new exercise"""
+        exercise = self.exercises.get(exercise_type, {})
+        self.current_exercise_data = {
+            'exercise_name': exercise.get('name', exercise_type),
+            'exercise_type': exercise_type,
+            'target_reps': target_reps,
+            'completed_reps': 0,
+            'sets_completed': 0,
+            'target_sets': target_sets,
+            'form_scores': [],
+            'start_time': datetime.now(),
+            'end_time': None,
+            'duration': 0,
+            'primary_muscle': exercise.get('primary_muscle', 'Unknown'),
+            'equipment': exercise.get('equipment', 'Unknown'),
+            'difficulty': exercise.get('difficulty', 'Unknown')
+        }
+
+    def log_rep_completion(self, form_score):
+        """Log a completed repetition"""
+        self.current_exercise_data['completed_reps'] += 1
+        self.current_exercise_data['form_scores'].append(form_score)
+
+    def complete_exercise_set(self):
+        """Mark current set as completed"""
+        self.current_exercise_data['sets_completed'] += 1
+
+    def finish_exercise_tracking(self):
+        """Finish tracking current exercise and add to session"""
+        if self.current_exercise_data['start_time']:
+            self.current_exercise_data['end_time'] = datetime.now()
+            self.current_exercise_data['duration'] = (
+                self.current_exercise_data['end_time'] - 
+                self.current_exercise_data['start_time']
+            ).total_seconds()
+            
+            # Calculate average form score
+            if self.current_exercise_data['form_scores']:
+                avg_form = sum(self.current_exercise_data['form_scores']) / len(self.current_exercise_data['form_scores'])
+                self.current_exercise_data['avg_form_score'] = round(avg_form, 1)
+            else:
+                self.current_exercise_data['avg_form_score'] = 0
+            
+            # Add to session
+            self.current_session['exercises'].append(self.current_exercise_data.copy())
+
+    def save_workout_report(self):
+        """Save workout session to JSON file"""
+        if not self.current_session['exercises']:
+            print("⚠️ No exercises to save")
+            return None
+            
+        # Finish session
+        self.current_session['end_time'] = datetime.now()
+        self.current_session['total_duration'] = (
+            self.current_session['end_time'] - 
+            self.current_session['start_time']
+        ).total_seconds()
+        
+        # Calculate session statistics
+        total_reps = sum(ex['completed_reps'] for ex in self.current_session['exercises'])
+        total_sets = sum(ex['sets_completed'] for ex in self.current_session['exercises'])
+        all_form_scores = []
+        for ex in self.current_session['exercises']:
+            all_form_scores.extend(ex['form_scores'])
+        
+        avg_session_form = round(sum(all_form_scores) / len(all_form_scores), 1) if all_form_scores else 0
+        
+        self.current_session.update({
+            'total_exercises': len(self.current_session['exercises']),
+            'total_reps': total_reps,
+            'total_sets': total_sets,
+            'avg_session_form': avg_session_form,
+            'muscles_worked': list(set(ex['primary_muscle'] for ex in self.current_session['exercises']))
+        })
+        
+        # Convert datetime objects to ISO format strings for JSON compatibility
+        session_copy = self.current_session.copy()
+        session_copy['start_time'] = self.current_session['start_time'].isoformat()
+        session_copy['end_time'] = self.current_session['end_time'].isoformat()
+        
+        # Convert exercise datetime objects
+        for exercise in session_copy['exercises']:
+            if exercise['start_time']:
+                exercise['start_time'] = exercise['start_time'].isoformat()
+            if exercise['end_time']:
+                exercise['end_time'] = exercise['end_time'].isoformat()
+        
+        # Create report directory if it doesn't exist
+        reports_dir = "workout_reports"
+        if not os.path.exists(reports_dir):
+            os.makedirs(reports_dir)
+        
+        # Generate filename with current date
+        date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(reports_dir, f"workout_{date_str}.json")
+        
+        # Save as JSON file
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(session_copy, f, indent=2, ensure_ascii=False)
+            
+            print(f"💾 Workout report saved: {filename}")
+            print(f"📊 Session Summary:")
+            print(f"   • Duration: {self.current_session['total_duration']:.1f} seconds")
+            print(f"   • Exercises: {self.current_session['total_exercises']}")
+            print(f"   • Total Reps: {self.current_session['total_reps']}")
+            print(f"   • Total Sets: {self.current_session['total_sets']}")
+            print(f"   • Avg Form: {self.current_session['avg_session_form']}%")
+            print(f"   • Muscles: {', '.join(self.current_session['muscles_worked'])}")
+            
+            return filename
+            
+        except Exception as e:
+            print(f"❌ Error saving report: {e}")
+            return None
+
+    def load_workout_report(self, filename):
+        """Load and display workout report from JSON file"""
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                session_data = json.load(f)
+            
+            # Convert ISO format strings back to datetime objects for display
+            start_time = datetime.fromisoformat(session_data['start_time'])
+            
+            print(f"\n📊 WORKOUT REPORT: {session_data['session_name']}")
+            print("=" * 60)
+            print(f"📅 Date: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"⏱️  Duration: {session_data['total_duration']:.1f} seconds ({session_data['total_duration']/60:.1f} minutes)")
+            print(f"🏋️  Exercises: {session_data['total_exercises']}")
+            print(f"🔢 Total Reps: {session_data['total_reps']}")
+            print(f"📈 Total Sets: {session_data['total_sets']}")
+            print(f"⭐ Avg Form: {session_data['avg_session_form']}%")
+            print(f"💪 Muscles Worked: {', '.join(session_data['muscles_worked'])}")
+            
+            print(f"\n📋 EXERCISE BREAKDOWN:")
+            print("-" * 60)
+            for i, exercise in enumerate(session_data['exercises'], 1):
+                print(f"{i}. {exercise['exercise_name']} ({exercise['primary_muscle']})")
+                print(f"   • Completed: {exercise['completed_reps']}/{exercise['target_reps']} reps")
+                print(f"   • Sets: {exercise['sets_completed']}/{exercise['target_sets']}")
+                print(f"   • Avg Form: {exercise['avg_form_score']}%")
+                print(f"   • Duration: {exercise['duration']:.1f}s")
+                if exercise['form_scores']:
+                    best_rep = max(exercise['form_scores'])
+                    worst_rep = min(exercise['form_scores'])
+                    print(f"   • Form Range: {worst_rep}% - {best_rep}%")
+                print()
+            
+            return session_data
+            
+        except FileNotFoundError:
+            print(f"❌ Report file not found: {filename}")
+            return None
+        except json.JSONDecodeError:
+            print(f"❌ Invalid JSON in report file: {filename}")
+            return None
+        except Exception as e:
+            print(f"❌ Error loading report: {e}")
+            return None
+
+    def list_workout_reports(self):
+        """List all available workout reports"""
+        reports_dir = "workout_reports"
+        if not os.path.exists(reports_dir):
+            print("📁 No workout reports found")
+            return []
+        
+        reports = [f for f in os.listdir(reports_dir) if f.endswith('.json')]
+        if not reports:
+            print("📁 No workout reports found")
+            return []
+        
+        reports.sort(reverse=True)  # Most recent first
+        
+        print(f"\n📊 AVAILABLE WORKOUT REPORTS ({len(reports)} found):")
+        print("-" * 50)
+        for i, report in enumerate(reports, 1):
+            # Extract date from filename
+            date_part = report.replace('workout_', '').replace('.json', '')
+            try:
+                date_obj = datetime.strptime(date_part, '%Y%m%d_%H%M%S')
+                formatted_date = date_obj.strftime('%Y-%m-%d %H:%M:%S')
+                print(f"{i}. {report} ({formatted_date})")
+            except:
+                print(f"{i}. {report}")
+        
+        return reports
+
     def preprocess_image(self, image):
         """Preprocess image for MoveNet"""
         # Resize to 256x256 (MoveNet Thunder input size)
@@ -763,13 +1041,18 @@ class MoveNetWorkoutTracker:
         
         return image
     
-    def run_workout(self, exercise_type, target_reps=10):
-        """Run workout session"""
+    def run_workout(self, exercise_type, target_reps=10, target_sets=1, set_number=1):
+        """Run workout session with tracking"""
         if exercise_type not in self.exercises:
             print(f"❌ Exercise '{exercise_type}' not supported")
             return
         
         exercise = self.exercises[exercise_type]
+        
+        # Start tracking if this is the first set
+        if set_number == 1:
+            self.start_exercise_tracking(exercise_type, target_reps, target_sets)
+        
         print(f"\n🏋️‍♀️ Starting {exercise['name']}")
         print(f"📋 {exercise['description']}")
         print(f"🎯 Target: {target_reps} reps")
@@ -828,6 +1111,8 @@ class MoveNetWorkoutTracker:
                 if rep_completed:
                     print(f"✅ Rep {self.rep_count} completed! Form: {form_score}%")
                     self.speak(str(self.rep_count))
+                    # Log the rep completion
+                    self.log_rep_completion(form_score)
                 
                 # Display info
                 cv2.putText(frame, f"Exercise: {exercise['name']}", 
@@ -855,11 +1140,17 @@ class MoveNetWorkoutTracker:
         cap.release()
         cv2.destroyAllWindows()
         
+        # Mark set as completed if target reps reached
         if self.rep_count >= target_reps:
-            print(f"\n🎉 Workout complete! {self.rep_count} reps finished!")
-            self.speak("Workout complete! Great job!")
+            print(f"\n🎉 Set complete! {self.rep_count} reps finished!")
+            self.speak("Set complete! Great job!")
+            self.complete_exercise_set()
         else:
-            print(f"\n⏹️ Workout stopped at {self.rep_count} reps")
+            print(f"\n⏹️ Set stopped at {self.rep_count} reps")
+        
+        # Finish exercise tracking if this was the last set
+        if set_number >= target_sets:
+            self.finish_exercise_tracking()
     
     def load_workout_from_json(self, filename):
         """Load workout from JSON file"""
@@ -875,8 +1166,13 @@ class MoveNetWorkoutTracker:
             return None
     
     def run_workout_program(self, workout_data):
-        """Run a complete workout program from JSON"""
-        print(f"\n🏋️‍♀️ Starting Workout: {workout_data.get('name', 'Custom Workout')}")
+        """Run a complete workout program from JSON with full tracking"""
+        workout_name = workout_data.get('name', 'Custom Workout')
+        
+        # Start workout session
+        self.start_workout_session(workout_name)
+        
+        print(f"\n🏋️‍♀️ Starting Workout: {workout_name}")
         if 'description' in workout_data:
             print(f"📋 {workout_data['description']}")
         
@@ -899,7 +1195,7 @@ class MoveNetWorkoutTracker:
                 print(f"\n🏋️‍♀️ Set {set_num}/{sets}")
                 input("Press Enter when ready...")
                 
-                self.run_workout(exercise_name, reps)
+                self.run_workout(exercise_name, reps, sets, set_num)
                 
                 if set_num < sets:
                     print(f"😴 Rest for {rest_time} seconds...")
@@ -910,7 +1206,17 @@ class MoveNetWorkoutTracker:
             
             print(f"✅ {self.exercises[exercise_name]['name']} complete!")
         
-        print(f"\n🎉 Workout '{workout_data.get('name', 'Custom')}' completed! Great job!")
+        print(f"\n🎉 Workout '{workout_name}' completed! Great job!")
+        
+        # Save workout report
+        saved_file = self.save_workout_report()
+        if saved_file:
+            print(f"📊 Full workout report saved to: {saved_file}")
+            
+            # Ask if user wants to view the report
+            view_report = input("\n📊 View detailed report? (y/n): ").strip().lower()
+            if view_report == 'y':
+                self.load_workout_report(saved_file)
     
     def show_exercises_by_category(self):
         """Show exercises organized by muscle group"""
@@ -997,10 +1303,11 @@ def main():
         print("5. 🔍 Search Exercise")
         print("6. 📹 Select Camera")
         print("7. 🎯 Test Camera View")
-        print("8. ❌ Quit")
+        print("8. 📊 View Workout Reports")
+        print("9. ❌ Quit")
         print()
         
-        choice = input("Enter your choice (1-8): ").strip()
+        choice = input("Enter your choice (1-9): ").strip()
         
         if choice == '1':
             # Single exercise mode
@@ -1018,7 +1325,35 @@ def main():
             if exercise_choice in tracker.exercises:
                 try:
                     reps = int(input("Target reps (default 10): ") or "10")
-                    tracker.run_workout(exercise_choice, reps)
+                    sets = int(input("Target sets (default 1): ") or "1")
+                    
+                    # Start a single exercise session
+                    exercise_name = tracker.exercises[exercise_choice]['name']
+                    tracker.start_workout_session(f"Single Exercise: {exercise_name}")
+                    
+                    # Run the exercise with all sets
+                    for set_num in range(1, sets + 1):
+                        if sets > 1:
+                            print(f"\n🏋️‍♀️ Set {set_num}/{sets}")
+                            input("Press Enter when ready...")
+                        
+                        tracker.run_workout(exercise_choice, reps, sets, set_num)
+                        
+                        if set_num < sets:
+                            rest_time = 60  # Default rest time
+                            print(f"😴 Rest for {rest_time} seconds...")
+                            for countdown in range(rest_time, 0, -1):
+                                print(f"   Rest: {countdown}s", end='\r')
+                                time.sleep(1)
+                            print("   Ready for next set!   ")
+                    
+                    # Save report
+                    saved_file = tracker.save_workout_report()
+                    if saved_file:
+                        view_report = input("\n📊 View workout report? (y/n): ").strip().lower()
+                        if view_report == 'y':
+                            tracker.load_workout_report(saved_file)
+                            
                 except ValueError:
                     print("❌ Please enter a valid number")
             else:
@@ -1066,11 +1401,28 @@ def main():
             tracker.test_camera_view()
         
         elif choice == '8':
+            # View workout reports
+            reports = tracker.list_workout_reports()
+            if reports:
+                try:
+                    choice = input(f"\nEnter report number (1-{len(reports)}) or filename: ").strip()
+                    if choice.isdigit() and 1 <= int(choice) <= len(reports):
+                        selected_report = reports[int(choice) - 1]
+                        tracker.load_workout_report(os.path.join("workout_reports", selected_report))
+                    elif choice:
+                        # Try as direct filename
+                        if not choice.endswith('.json'):
+                            choice += '.json'
+                        tracker.load_workout_report(os.path.join("workout_reports", choice))
+                except ValueError:
+                    print("❌ Invalid selection")
+        
+        elif choice == '9':
             print("👋 Goodbye! Stay fit!")
             break
         
         else:
-            print("❌ Invalid choice. Please enter 1-8.")
+            print("❌ Invalid choice. Please enter 1-9.")
 
 if __name__ == "__main__":
     main()
