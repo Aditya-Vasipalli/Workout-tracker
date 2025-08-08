@@ -1478,6 +1478,10 @@ class MoveNetWorkoutTracker:
             self.complete_exercise_set()
         else:
             print(f"\n⏹️ Set stopped at {self.rep_count} reps")
+        
+        # Finish exercise tracking if this was the last set
+        if self.current_set_number >= self.current_target_sets:
+            self.finish_exercise_tracking()
 
     def display_single_camera_feed(self, frame, keypoints, exercise, target_reps, exercise_type):
         """Display single camera feed with extended text area"""

@@ -9,7 +9,7 @@ import os
 
 def show_menu():
     """Display main menu"""
-    print("🏋️‍♀️ AI WORKOUT TRACKER")
+    print("AI WORKOUT TRACKER")
     print("=" * 40)
     print()
     print("Choose your workout mode:")
