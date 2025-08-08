@@ -37,6 +37,7 @@ class MoveNetWorkoutTracker:
         self.min_rep_time = 1.2
         self.angle_history = []
         self.confidence_threshold = 0.3
+        self.last_form_score = None  # Track last form score for display
         
         # Workout session tracking
         self.current_session = {
@@ -626,30 +627,55 @@ class MoveNetWorkoutTracker:
             keypoints = self.get_pose_landmarks(frame)
             
             if keypoints is not None:
-                # Draw pose
-                annotated_image = self.draw_keypoints(frame, keypoints)
+                # Create extended display for camera test
+                frame_height, frame_width = frame.shape[:2]
+                text_area_width = 400
+                extended_width = frame_width + text_area_width
+                extended_frame = np.zeros((frame_height, extended_width, 3), dtype=np.uint8)
                 
-                # Add status text
-                cv2.putText(annotated_image, "CAMERA TEST - Press 'q' to quit", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                # Draw pose on camera frame
+                annotated_image = self.draw_keypoints(frame, keypoints)
+                extended_frame[:, :frame_width] = annotated_image
+                
+                # Add status text in black area
+                text_x = frame_width + 20
+                cv2.putText(extended_frame, "CAMERA TEST", 
+                           (text_x, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
                 
                 # Count visible keypoints
                 visible_points = sum(1 for kp in keypoints if kp[2] > self.confidence_threshold)
-                cv2.putText(annotated_image, f"Visible keypoints: {visible_points}/17", 
-                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                cv2.putText(extended_frame, f"Visible Points:", 
+                           (text_x, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                cv2.putText(extended_frame, f"{visible_points}/17", 
+                           (text_x, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
                 
                 if visible_points >= 10:
-                    cv2.putText(annotated_image, "GOOD POSITION!", 
-                               (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                    cv2.putText(extended_frame, "GOOD POSITION!", 
+                               (text_x, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 else:
-                    cv2.putText(annotated_image, "ADJUST POSITION", 
-                               (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    cv2.putText(extended_frame, "ADJUST POSITION", 
+                               (text_x, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                
+                cv2.putText(extended_frame, "Press 'Q' to quit", 
+                           (text_x, 250), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
                     
-                cv2.imshow('Camera Test', annotated_image)
+                cv2.imshow('Camera Test', extended_frame)
             else:
-                cv2.putText(frame, "NO POSE DETECTED", 
-                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                cv2.imshow('Camera Test', frame)
+                # No pose detected - use extended layout too
+                frame_height, frame_width = frame.shape[:2]
+                text_area_width = 400
+                extended_width = frame_width + text_area_width
+                extended_frame = np.zeros((frame_height, extended_width, 3), dtype=np.uint8)
+                extended_frame[:, :frame_width] = frame
+                
+                text_x = frame_width + 20
+                cv2.putText(extended_frame, "NO POSE DETECTED", 
+                           (text_x, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.putText(extended_frame, "Position yourself", 
+                           (text_x, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                cv2.putText(extended_frame, "in camera frame", 
+                           (text_x, 170), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                cv2.imshow('Camera Test', extended_frame)
             
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -738,6 +764,7 @@ class MoveNetWorkoutTracker:
         """Log a completed repetition"""
         self.current_exercise_data['completed_reps'] += 1
         self.current_exercise_data['form_scores'].append(form_score)
+        self.last_form_score = form_score  # Store for display
 
     def complete_exercise_set(self):
         """Mark current set as completed"""
@@ -1101,9 +1128,20 @@ class MoveNetWorkoutTracker:
             # Get pose
             keypoints = self.get_pose_landmarks(frame)
             
+            # Create extended display with text area
+            frame_height, frame_width = frame.shape[:2]
+            text_area_width = 400  # Width for text information
+            extended_width = frame_width + text_area_width
+            
+            # Create extended frame with black background for text area
+            extended_frame = np.zeros((frame_height, extended_width, 3), dtype=np.uint8)
+            
+            # Place original camera frame on the left
+            extended_frame[:, :frame_width] = frame
+            
             if keypoints is not None:
-                # Draw keypoints
-                frame = self.draw_keypoints(frame, keypoints)
+                # Draw keypoints on camera frame
+                extended_frame[:, :frame_width] = self.draw_keypoints(frame, keypoints)
                 
                 # Track exercise
                 rep_completed, form_score, current_angle = self.track_exercise(exercise_type, keypoints)
@@ -1114,20 +1152,59 @@ class MoveNetWorkoutTracker:
                     # Log the rep completion
                     self.log_rep_completion(form_score)
                 
-                # Display info
-                cv2.putText(frame, f"Exercise: {exercise['name']}", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Reps: {self.rep_count}/{target_reps}", 
-                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Angle: {current_angle:.1f}°", 
-                           (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                cv2.putText(frame, f"State: {self.state}", 
-                           (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                # Display info in the black text area (right side)
+                text_x = frame_width + 20  # Start text 20px into the black area
+                line_height = 35
+                
+                # Exercise information
+                cv2.putText(extended_frame, f"Exercise:", 
+                           (text_x, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                cv2.putText(extended_frame, f"{exercise['name']}", 
+                           (text_x, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                
+                # Rep counter
+                cv2.putText(extended_frame, f"Reps:", 
+                           (text_x, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                cv2.putText(extended_frame, f"{self.rep_count}/{target_reps}", 
+                           (text_x, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                
+                # Current angle
+                cv2.putText(extended_frame, f"Angle:", 
+                           (text_x, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                cv2.putText(extended_frame, f"{current_angle:.1f}°", 
+                           (text_x, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                
+                # Movement state
+                cv2.putText(extended_frame, f"State:", 
+                           (text_x, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                cv2.putText(extended_frame, f"{self.state}", 
+                           (text_x, 310), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
+                
+                # Form score (if available)
+                if hasattr(self, 'last_form_score') and self.last_form_score is not None:
+                    cv2.putText(extended_frame, f"Form Score:", 
+                               (text_x, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    color = (0, 255, 0) if self.last_form_score >= 80 else (0, 255, 255) if self.last_form_score >= 60 else (0, 0, 255)
+                    cv2.putText(extended_frame, f"{self.last_form_score}%", 
+                               (text_x, 390), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                
+                # Instructions
+                cv2.putText(extended_frame, "Controls:", 
+                           (text_x, 450), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
+                cv2.putText(extended_frame, "Q - Quit", 
+                           (text_x, 480), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+                cv2.putText(extended_frame, "S - Skip Rep", 
+                           (text_x, 500), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+                
             else:
-                cv2.putText(frame, "⚠ Position yourself in frame", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                # No pose detected - show warning in text area
+                text_x = frame_width + 20
+                cv2.putText(extended_frame, "⚠ POSITION YOURSELF", 
+                           (text_x, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                cv2.putText(extended_frame, "IN CAMERA FRAME", 
+                           (text_x, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             
-            cv2.imshow('MoveNet Workout Tracker', frame)
+            cv2.imshow('MoveNet Workout Tracker', extended_frame)
             
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
