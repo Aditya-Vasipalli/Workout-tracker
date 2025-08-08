@@ -42,6 +42,14 @@ class MoveNetWorkoutTracker:
         self.confidence_threshold = 0.3
         self.last_form_score = None  # Track last form score for display
         
+        # Progressive tracking system for strict form validation
+        self.progressive_states = []  # Track angle progression: [180°, 150°, 90°, 60°]
+        self.progression_thresholds = [180, 150, 90, 60]  # Default thresholds
+        self.current_progression = 0  # Current stage in progression
+        self.progression_direction = 'down'  # 'down' or 'up'
+        self.strict_form_enabled = False  # Enable strict progressive validation
+        self.progression_start_time = 0  # Time when progression started
+        
         # Workout session tracking
         self.current_session = {
             'start_time': None,
@@ -457,9 +465,20 @@ class MoveNetWorkoutTracker:
                 'difficulty': 'Beginner',
                 'type': 'Strength',
                 'keypoints': ['left_shoulder', 'left_elbow', 'left_wrist'],
-                'down_threshold': 160,  # Straight arm
-                'up_threshold': 60,     # Bent arm
-                'description': 'Keep elbow close to body, full curl'
+                'down_threshold': 170,  # STRICTER: More extended arm required
+                'up_threshold': 50,     # STRICTER: More flexed arm required
+                'description': 'Keep elbow close to body, full curl',
+                'form_requirements': {
+                    'elbow_stability': True,
+                    'controlled_movement': True,
+                    'full_range': True
+                },
+                'min_rep_time': 1.5,  # Minimum time for one rep
+                'camera_setup': {
+                    'primary': 'side',
+                    'secondary': 'front',
+                    'form_validation': 'strict'
+                }
             },
             'squats': {
                 'name': 'Squats',
@@ -479,9 +498,15 @@ class MoveNetWorkoutTracker:
                 'difficulty': 'Intermediate',
                 'type': 'Strength',
                 'keypoints': ['left_shoulder', 'left_elbow', 'left_wrist'],
-                'down_threshold': 90,   # Arms at shoulder level
-                'up_threshold': 170,    # Arms extended overhead
-                'description': 'Press weights overhead, keep core tight'
+                'down_threshold': 80,   # Arms at shoulder level (stricter)
+                'up_threshold': 175,    # Arms fully extended overhead (stricter)
+                'description': 'Press weights overhead, keep core tight',
+                'form_requirements': {
+                    'min_rep_time': 1.5,  # Minimum time for controlled movement
+                    'requires_overhead': True,  # Must reach full overhead position
+                    'validate_form': True,  # Enable form validation
+                    'strict_range': True    # Require full range of motion
+                }
             }
         }
     
@@ -563,6 +588,20 @@ class MoveNetWorkoutTracker:
                 self.tts_working = False
         
         self.tts_lock = threading.Lock()
+    
+    def enable_strict_form_validation(self, enabled=True):
+        """Enable or disable strict progressive form validation"""
+        self.strict_form_enabled = enabled
+        if enabled:
+            self.reset_progression()
+            print("✅ Strict progressive form validation ENABLED")
+            print("   - Requires full 180°→150°→90°→60°→90°→150°→180° progression")
+            print("   - Prevents false reps from random movement")
+            print("   - Ensures proper form and controlled movement")
+        else:
+            print("⚠️ Strict progressive form validation DISABLED")
+            print("   - Using basic angle-based rep counting")
+        return enabled
     
     def speak(self, text):
         """
@@ -1193,6 +1232,92 @@ class MoveNetWorkoutTracker:
         except:
             return 0
     
+    def validate_progressive_movement(self, current_angle, exercise_type):
+        """
+        Progressive movement validation for strict form checking
+        Ensures movement follows proper sequence: 180° → 150° → 90° → 60° → 90° → 150° → 180°
+        """
+        if not self.strict_form_enabled:
+            return True, "Progressive validation disabled"
+        
+        current_time = time.time()
+        
+        # Exercise-specific thresholds
+        if exercise_type == 'bicep_curls':
+            self.progression_thresholds = [170, 140, 90, 50]  # Stricter for bicep curls
+        elif exercise_type == 'shoulder_press':
+            self.progression_thresholds = [175, 140, 100, 80]  # Overhead press progression
+        else:
+            self.progression_thresholds = [180, 150, 90, 60]  # Default progression
+        
+        # Initialize progression tracking
+        if self.current_progression == 0 and self.progression_direction == 'down':
+            self.progression_start_time = current_time
+            self.progressive_states = []
+        
+        # Track progression based on direction
+        if self.progression_direction == 'down':
+            # Moving from extended to contracted position
+            target_angle = self.progression_thresholds[self.current_progression]
+            
+            if current_angle <= target_angle:
+                self.progressive_states.append({
+                    'stage': self.current_progression,
+                    'angle': current_angle,
+                    'time': current_time,
+                    'threshold': target_angle
+                })
+                self.current_progression += 1
+                
+                # Check if we've completed the down phase
+                if self.current_progression >= len(self.progression_thresholds):
+                    self.progression_direction = 'up'
+                    self.current_progression = len(self.progression_thresholds) - 2  # Start going back up
+                    
+        elif self.progression_direction == 'up':
+            # Moving from contracted to extended position
+            target_angle = self.progression_thresholds[self.current_progression]
+            
+            if current_angle >= target_angle:
+                self.progressive_states.append({
+                    'stage': self.current_progression,
+                    'angle': current_angle,
+                    'time': current_time,
+                    'threshold': target_angle
+                })
+                self.current_progression -= 1
+                
+                # Check if we've completed the full rep
+                if self.current_progression < 0:
+                    # Full rep completed with proper progression
+                    total_time = current_time - self.progression_start_time
+                    self.reset_progression()
+                    return True, f"Valid rep completed in {total_time:.1f}s"
+        
+        # Check for progression timeout (too slow)
+        if current_time - self.progression_start_time > 10.0:  # 10 second timeout
+            self.reset_progression()
+            return False, "Movement too slow - progression timeout"
+        
+        # Check for skipped stages (too fast/jerky movement)
+        if len(self.progressive_states) >= 2:
+            last_two = self.progressive_states[-2:]
+            stage_gap = abs(last_two[1]['stage'] - last_two[0]['stage'])
+            time_gap = last_two[1]['time'] - last_two[0]['time']
+            
+            if stage_gap > 1 and time_gap < 0.3:  # Skipped stage too quickly
+                self.reset_progression()
+                return False, "Movement too jerky - skipped progression stage"
+        
+        return None, f"Progressing: Stage {self.current_progression}, Direction: {self.progression_direction}"
+    
+    def reset_progression(self):
+        """Reset progressive tracking state"""
+        self.current_progression = 0
+        self.progression_direction = 'down'
+        self.progressive_states = []
+        self.progression_start_time = 0
+    
     def track_exercise(self, exercise_type, keypoints):
         """Simple, reliable exercise tracking with bilateral support"""
         if exercise_type not in self.exercises:
@@ -1274,16 +1399,53 @@ class MoveNetWorkoutTracker:
             
             # Different logic for different exercises
             if exercise_type == 'bicep_curls':
-                # For bicep curls: down = straight arm (large angle), up = bent arm (small angle)
-                if self.state == 'down' and smoothed_angle < exercise['up_threshold'] + 15:
-                    self.state = 'up'
-                elif self.state == 'up' and smoothed_angle > exercise['down_threshold'] - 15:
-                    if current_time - self.last_rep_time > self.min_rep_time:
+                # PROGRESSIVE TRACKING: Use strict progressive validation for bicep curls
+                progression_result, progression_message = self.validate_progressive_movement(smoothed_angle, exercise_type)
+                
+                if progression_result is True:
+                    # Full progressive rep completed
+                    rep_completed = True
+                    self.last_rep_time = current_time
+                    form_score = 95  # High score for completing progressive validation
+                    self.state = 'down'
+                    
+                elif progression_result is False:
+                    # Progressive validation failed - reset state
+                    self.state = 'down'
+                    form_score = 30  # Low score for failed progression
+                    
+                else:
+                    # Still progressing - use fallback logic for basic state tracking
+                    if self.state == 'down' and smoothed_angle < exercise['up_threshold'] - 5:  # Stricter threshold
+                        if current_time - self.last_rep_time > 0.8:  # Longer minimum time
+                            self.state = 'up'
+                    elif self.state == 'up' and smoothed_angle > exercise['down_threshold'] + 10:  # Stricter threshold
+                        if current_time - self.last_rep_time > 1.5:  # Must be in this state for 1.5s
+                            # Only count rep if not using progressive tracking or as backup
+                            if not self.strict_form_enabled:
+                                rep_completed = True
+                                self.last_rep_time = current_time
+                                # Form score based on range achieved
+                                range_achieved = smoothed_angle - exercise['up_threshold']
+                                form_score = min(100, max(60, int(70 + range_achieved/3)))
+                            self.state = 'down'
+                        
+            elif exercise_type == 'shoulder_press':
+                # STRICT: Shoulder press requires full overhead extension and controlled movement
+                if self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 5:  # Must reach almost full extension
+                    if current_time - self.last_rep_time > 1.0:  # Longer pause for overhead position
+                        self.state = 'up'
+                elif self.state == 'up' and smoothed_angle < exercise['down_threshold'] + 10:  # Return to shoulder level
+                    if current_time - self.last_rep_time > 1.5:  # Controlled lowering movement
                         rep_completed = True
                         self.last_rep_time = current_time
-                        # Form score based on range achieved
-                        form_score = min(100, max(60, int(100 - abs(smoothed_angle - exercise['down_threshold']))))
-                    self.state = 'down'
+                        # Strict form scoring - heavily penalize incomplete overhead extension
+                        overhead_achieved = smoothed_angle >= (exercise['up_threshold'] - 5)
+                        if overhead_achieved:
+                            form_score = min(100, max(75, int(smoothed_angle * 0.55)))
+                        else:
+                            form_score = max(30, int(smoothed_angle * 0.4))  # Low score for poor form
+                        self.state = 'down'
             elif exercise_type == 'romanian_deadlift':
                 # Romanian deadlift: up = standing (large angle), down = hip hinge (small angle)
                 # Focus on controlled movement and proper range

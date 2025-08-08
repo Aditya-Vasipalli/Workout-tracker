@@ -15,10 +15,11 @@ def show_menu():
     print("Choose your workout mode:")
     print("1. 🚀 Enhanced Tracker (25+ exercises)")
     print("2. 🤖 MoveNet Tracker (55+ exercises)")
-    print("3. 📋 Run JSON Workout")
-    print("4. 📖 Read workout log")
-    print("5. 📚 View supported exercises")
-    print("6. ❌ Exit")
+    print("3. � MoveNet with STRICT Form Validation")
+    print("4. �📋 Run JSON Workout")
+    print("5. 📖 Read workout log")
+    print("6. 📚 View supported exercises")
+    print("7. ❌ Exit")
     print()
 
 def run_json_workout():
@@ -82,6 +83,40 @@ def run_movenet_tracker():
     except Exception as e:
         print(f"❌ Error running MoveNet tracker: {e}")
 
+def run_strict_movenet_tracker():
+    """Run the MoveNet tracker with strict progressive form validation"""
+    try:
+        from movenet_tracker import MoveNetWorkoutTracker
+        
+        print("🔒 STRICT FORM VALIDATION MODE")
+        print("=" * 40)
+        print("This mode uses progressive movement tracking to ensure:")
+        print("• Proper form (180°→150°→90°→60°→90°→150°→180°)")
+        print("• Controlled movement timing")
+        print("• No false reps from random movement")
+        print("• Injury prevention through strict validation")
+        print()
+        
+        confirm = input("Enable strict form validation? (y/n): ").strip().lower()
+        if confirm != 'y':
+            print("Returning to regular MoveNet tracker...")
+            run_movenet_tracker()
+            return
+        
+        # Initialize tracker with strict form validation
+        tracker = MoveNetWorkoutTracker()
+        tracker.enable_strict_form_validation(True)
+        
+        # Run the main tracking interface
+        from movenet_tracker import main
+        main()
+        
+    except ImportError as e:
+        print(f"❌ Error importing MoveNet tracker: {e}")
+        print("Make sure TensorFlow is installed.")
+    except Exception as e:
+        print(f"❌ Error running strict MoveNet tracker: {e}")
+
 def run_enhanced_tracker():
     """Run the enhanced workout tracker"""
     try:
@@ -118,23 +153,25 @@ def main():
         show_menu()
         
         try:
-            choice = input("Enter your choice (1-6): ").strip()
+            choice = input("Enter your choice (1-7): ").strip()
             
             if choice == '1':
                 run_enhanced_tracker()
             elif choice == '2':
                 run_movenet_tracker()
             elif choice == '3':
-                run_json_workout()
+                run_strict_movenet_tracker()
             elif choice == '4':
-                read_workout_log()
+                run_json_workout()
             elif choice == '5':
-                show_supported_exercises()
+                read_workout_log()
             elif choice == '6':
+                show_supported_exercises()
+            elif choice == '7':
                 print("👋 Goodbye! Stay fit!")
                 break
             else:
-                print("❌ Invalid choice. Please enter 1-6.")
+                print("❌ Invalid choice. Please enter 1-7.")
             
             input("\nPress Enter to continue...")
             print("\n" + "="*50)
