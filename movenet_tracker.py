@@ -370,13 +370,26 @@ class MoveNetWorkoutTracker:
             'romanian_deadlift': {
                 'name': 'Romanian Deadlift',
                 'primary_muscle': 'Hamstrings/Glutes',
-                'equipment': 'Dumbbell',
+                'equipment': 'Dumbbell/Barbell',
                 'difficulty': 'Intermediate',
                 'type': 'Strength',
-                'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
-                'down_threshold': 90,
-                'up_threshold': 170,
-                'description': 'Soft knees, hinge hips'
+                'keypoints': ['left_hip', 'left_knee', 'left_ankle', 'left_shoulder'],
+                'down_threshold': 80,    # Hip hinge down position
+                'up_threshold': 160,     # Standing upright position
+                'description': 'Soft knees, hinge at hips, keep back straight',
+                'form_tips': [
+                    '🦵 Keep knees slightly bent throughout',
+                    '🍑 Push hips back, not down',
+                    '📏 Lower until you feel hamstring stretch',
+                    '🏋️ Keep weight close to legs',
+                    '📐 Maintain neutral spine'
+                ],
+                'camera_setup': {
+                    'primary': 'side',          # Side view essential for form
+                    'secondary': 'front',       # Front view for symmetry
+                    'primary_tracking': True,
+                    'form_validation': 'both'
+                }
             },
             'calf_raise': {
                 'name': 'Calf Raise',
@@ -1271,6 +1284,19 @@ class MoveNetWorkoutTracker:
                         # Form score based on range achieved
                         form_score = min(100, max(60, int(100 - abs(smoothed_angle - exercise['down_threshold']))))
                     self.state = 'down'
+            elif exercise_type == 'romanian_deadlift':
+                # Romanian deadlift: up = standing (large angle), down = hip hinge (small angle)
+                # Focus on controlled movement and proper range
+                if self.state == 'up' and smoothed_angle < exercise['down_threshold'] + 20:
+                    self.state = 'down'
+                elif self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 20:
+                    if current_time - self.last_rep_time > 2.0:  # Slower movement, longer time
+                        rep_completed = True
+                        self.last_rep_time = current_time
+                        # Form score emphasizes range of motion and control
+                        range_score = min(100, max(50, int((smoothed_angle - exercise['down_threshold']) * 2)))
+                        form_score = min(100, max(60, range_score))
+                    self.state = 'up'
             else:
                 # For other exercises: down = small angle, up = large angle
                 if self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 15:
@@ -1811,7 +1837,7 @@ def main():
         if choice == '1':
             # Single exercise mode
             print("\nAvailable exercises:")
-            for key, exercise in list(tracker.exercises.items())[:10]:  # Show first 10
+            for key, exercise in list(tracker.exercises.items())[10:20]:  # Show next 10
                 print(f"  {key}: {exercise['name']}")
             print("  ... (type 'all' to see all exercises)")
             

@@ -1,0 +1,42 @@
+{
+  "name": "8 Aug Command Set",
+  "description": "Afull body workout with balanced upper and core work.",
+  "exercises": [
+    {
+      "exercise": "hip_thrust",
+      "sets": 3,
+      "reps": 12,
+      "rest": 60
+    },
+    {
+      "exercise": "goblet_squat",
+      "sets": 3,
+      "reps": 12,
+      "rest": 60
+    },
+    {
+      "exercise": "shoulder_press",
+      "sets": 3,
+      "reps": 10,
+      "rest": 60
+    },
+    {
+      "exercise": "bicep_curl",
+      "sets": 3,
+      "reps": 12,
+      "rest": 45
+    },
+    {
+      "exercise": "romanian_deadlift",
+      "sets": 3,
+      "reps": 10,
+      "rest": 60
+    },
+    {
+      "exercise": "plank",
+      "sets": 3,
+      "reps": 30,
+      "rest": 30
+    }
+  ]
+}
