@@ -28,7 +28,10 @@ class MoveNetWorkoutTracker:
         self.setup_tts()
         
         # Camera selection
-        self.camera_index = 0  # Default to laptop camera
+        self.primary_camera_index = 0    # Laptop camera (adjustable)
+        self.secondary_camera_index = 1  # Overhead/sky camera (fixed)
+        self.dual_camera_mode = False    # Enable dual camera tracking
+        self.camera_setup = None         # Store current camera configuration
         
         # Exercise tracking
         self.rep_count = 0
@@ -79,7 +82,13 @@ class MoveNetWorkoutTracker:
                 'keypoints': ['left_shoulder', 'left_hip', 'left_knee'],
                 'down_threshold': 140,
                 'up_threshold': 170,
-                'description': 'Lie down, lift hips up. Add pause at top for intensity'
+                'description': 'Lie down, lift hips up. Add pause at top for intensity',
+                'camera_setup': {
+                    'primary': 'side',          # Laptop camera for hip extension depth
+                    'secondary': 'overhead',    # Sky camera for hip/knee alignment
+                    'primary_tracking': True,
+                    'form_validation': 'both'
+                }
             },
             'hip_thrust': {
                 'name': 'Hip Thrust',
@@ -98,10 +107,17 @@ class MoveNetWorkoutTracker:
                 'equipment': 'Bodyweight',
                 'difficulty': 'Beginner',
                 'type': 'Strength',
-                'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
-                'down_threshold': 90,
-                'up_threshold': 140,
-                'description': 'Soles together, rapid reps'
+                'keypoints': ['left_knee', 'left_hip', 'right_knee'],  # Knee width tracking
+                'down_threshold': 90,   # Knees closer (hips down)
+                'up_threshold': 130,    # Knees wider (hips up)
+                'description': 'Soles together, knees wide, hip thrust',
+                'camera_setup': {
+                    'primary': 'overhead',      # Sky camera for knee separation
+                    'secondary': 'side',        # Laptop camera for hip thrust depth
+                    'primary_tracking': True,   # Main tracking from overhead
+                    'form_validation': 'both'   # Use both for complete form analysis
+                },
+                'form_cues': ['Keep soles together', 'Push knees out wide', 'Squeeze glutes at top']
             },
             'donkey_kick': {
                 'name': 'Donkey Kick',
@@ -109,10 +125,26 @@ class MoveNetWorkoutTracker:
                 'equipment': 'Bodyweight',
                 'difficulty': 'Beginner',
                 'type': 'Strength',
-                'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
+                'bilateral': True,  # Exercise requires both sides
+                'sides': {
+                    'left': {
+                        'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
+                        'name': 'Donkey Kick (Left)'
+                    },
+                    'right': {
+                        'keypoints': ['right_hip', 'right_knee', 'right_ankle'],
+                        'name': 'Donkey Kick (Right)'
+                    }
+                },
                 'down_threshold': 90,
                 'up_threshold': 160,
-                'description': 'On hands and knees, kick back. Add ankle weights to progress'
+                'description': 'On hands and knees, kick back. Add ankle weights to progress',
+                'camera_setup': {
+                    'primary': 'overhead',      # Sky camera for leg position/alignment
+                    'secondary': 'side',        # Laptop camera for kick height
+                    'primary_tracking': True,   # Track from overhead
+                    'form_validation': 'both'
+                }
             },
             'fire_hydrant': {
                 'name': 'Fire Hydrant',
@@ -120,10 +152,26 @@ class MoveNetWorkoutTracker:
                 'equipment': 'Bodyweight',
                 'difficulty': 'Beginner',
                 'type': 'Strength',
-                'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
+                'bilateral': True,  # Exercise requires both sides
+                'sides': {
+                    'left': {
+                        'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
+                        'name': 'Fire Hydrant (Left)'
+                    },
+                    'right': {
+                        'keypoints': ['right_hip', 'right_knee', 'right_ankle'],
+                        'name': 'Fire Hydrant (Right)'
+                    }
+                },
                 'down_threshold': 90,
                 'up_threshold': 130,
-                'description': 'Great for side glutes'
+                'description': 'Great for side glutes',
+                'camera_setup': {
+                    'primary': 'overhead',      # Sky camera for lateral movement
+                    'secondary': 'side',        # Laptop camera for height validation
+                    'primary_tracking': True,
+                    'form_validation': 'both'
+                }
             },
             'bulgarian_split_squat': {
                 'name': 'Bulgarian Split Squat',
@@ -134,7 +182,13 @@ class MoveNetWorkoutTracker:
                 'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
                 'down_threshold': 90,
                 'up_threshold': 160,
-                'description': 'Lean forward for glute focus'
+                'description': 'Lean forward for glute focus',
+                'camera_setup': {
+                    'primary': 'side',          # Laptop camera for depth tracking
+                    'secondary': 'overhead',    # Sky camera for balance/alignment
+                    'primary_tracking': True,
+                    'form_validation': 'both'
+                }
             },
             'step_up': {
                 'name': 'Step-Up',
@@ -145,7 +199,13 @@ class MoveNetWorkoutTracker:
                 'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
                 'down_threshold': 90,
                 'up_threshold': 160,
-                'description': 'Full foot on platform'
+                'description': 'Full foot on platform',
+                'camera_setup': {
+                    'primary': 'side',          # Laptop camera for step height
+                    'secondary': 'overhead',    # Sky camera for foot placement
+                    'primary_tracking': True,
+                    'form_validation': 'both'
+                }
             },
             'glute_kickback': {
                 'name': 'Glute Kickback',
@@ -550,6 +610,16 @@ class MoveNetWorkoutTracker:
             print("   👁️  Should see: full hip, knee, ankle")
             print("   ✅ Good for: hip extension tracking")
             
+        elif exercise_type == 'frog_pump':
+            print("📱 **FRONT VIEW REQUIRED** for accurate tracking:")
+            print("   📍 Place phone FACING your feet (head-to-toe view)")
+            print("   📐 Phone at floor level, slight angle up")
+            print("   📏 Distance: 4-5 feet away")
+            print("   👁️  MUST see: both knees, hips, and knee separation")
+            print("   ⚠️  CRITICAL: Camera must see both legs to track knee width!")
+            print("   ✅ Good for: knee separation + hip thrust tracking")
+            print("   🎯 FORM CUES: Keep soles together, push knees wide apart")
+            
         elif exercise_type in ['leg_raise', 'russian_twist']:
             print("📱 SIDE VIEW SETUP:")
             print("   📍 Place phone on SIDE (left or right)")
@@ -606,9 +676,9 @@ class MoveNetWorkoutTracker:
         print("📱 Adjust position until pose detection works well")
         print("❌ Press 'q' to quit test")
         
-        cap = cv2.VideoCapture(self.camera_index)
+        cap = cv2.VideoCapture(self.primary_camera_index)
         if not cap.isOpened():
-            print(f"❌ Could not open camera {self.camera_index}")
+            print(f"❌ Could not open camera {self.primary_camera_index}")
             return
             
         # Set camera properties for better quality
@@ -684,51 +754,172 @@ class MoveNetWorkoutTracker:
         cv2.destroyAllWindows()
         print("✅ Camera test completed")
 
+    def setup_dual_cameras(self, exercise_type):
+        """Setup both cameras for dual tracking"""
+        print("\n📹📹 DUAL CAMERA SETUP")
+        print("=" * 50)
+        
+        exercise = self.exercises.get(exercise_type, {})
+        camera_config = exercise.get('camera_setup', {})
+        
+        if not camera_config:
+            print("❌ No dual camera config for this exercise")
+            return False
+        
+        exercise_name = exercise.get('name', exercise_type)
+        primary_angle = camera_config.get('primary', 'overhead')
+        secondary_angle = camera_config.get('secondary', 'side')
+        
+        print(f"🎯 Exercise: {exercise_name}")
+        print(f"📹 Primary Camera: {primary_angle.upper()} (main tracking)")
+        print(f"📷 Secondary Camera: {secondary_angle.upper()} (form validation)")
+        
+        print(f"\n🎬 CAMERA INSTRUCTIONS:")
+        
+        # Sky camera (overhead) instructions
+        if 'overhead' in [primary_angle, secondary_angle]:
+            print("📹 SKY/OVERHEAD CAMERA (your fixed camera):")
+            print("   ✅ Should already be positioned above workout area")
+            print("   👁️  Should see: full body from above when lying down")
+            print("   🎯 Good for: knee separation, leg alignment, arm positioning")
+            print("   ⚠️  Make sure it captures the full mat area")
+        
+        # Laptop camera instructions  
+        if primary_angle == 'side' or secondary_angle == 'side':
+            print(f"\n💻 LAPTOP CAMERA - SIDE VIEW SETUP:")
+            if exercise_type in ['glute_bridge', 'hip_thrust', 'bulgarian_split_squat']:
+                print("   📍 Position laptop to your LEFT or RIGHT side")
+                print("   📐 Camera at hip/knee level")
+                print("   📏 Distance: 4-5 feet away")
+                print("   👁️  Should see: full profile - shoulder to ankle")
+                print("   🎯 Good for: hip extension depth, knee bend angle")
+            elif exercise_type in ['squat', 'lunge']:
+                print("   📍 Position laptop to your LEFT or RIGHT side")
+                print("   📐 Camera at knee level")
+                print("   📏 Distance: 5-6 feet away")
+                print("   👁️  Should see: full body profile during movement")
+                print("   🎯 Good for: squat depth, knee tracking")
+            else:
+                print("   📍 Position laptop to your LEFT or RIGHT side")
+                print("   📐 Camera at exercise focus level")
+                print("   📏 Distance: 4-6 feet away")
+                print("   👁️  Should see: key joints clearly")
+        
+        if primary_angle == 'front' or secondary_angle == 'front':
+            print(f"\n💻 LAPTOP CAMERA - FRONT VIEW SETUP:")
+            print("   📍 Position laptop FACING you")
+            print("   📐 Camera at chest/hip level")
+            print("   📏 Distance: 4-6 feet away")
+            print("   👁️  Should see: front view of exercise")
+            print("   🎯 Good for: arm width, leg separation")
+        
+        print(f"\n🔧 TRACKING PRIORITY:")
+        print(f"   🥇 Primary: {primary_angle.upper()} camera handles rep counting")
+        print(f"   🥈 Secondary: {secondary_angle.upper()} camera validates form")
+        print(f"   🎯 Both cameras contribute to form scoring")
+        
+        # Test both cameras
+        print("\n🧪 CAMERA TEST SEQUENCE:")
+        print("1. First we'll test the primary camera")
+        print("2. Then we'll test the secondary camera") 
+        print("3. Finally we'll run both together")
+        
+        input("\n✅ Press Enter when both cameras are positioned...")
+        
+        return True
+
+    def select_camera_setup(self, exercise_type):
+        """Select between single or dual camera setup"""
+        exercise = self.exercises.get(exercise_type, {})
+        camera_config = exercise.get('camera_setup')
+        
+        if camera_config:
+            print(f"\n📹 Camera Setup Options for {exercise.get('name', exercise_type)}:")
+            print("1. 🔥 DUAL CAMERA MODE (Recommended)")
+            print("   - Sky camera + Laptop camera")
+            print("   - Best form analysis")
+            print("   - Complete movement tracking")
+            print("2. 📱 SINGLE CAMERA MODE")
+            print("   - Use laptop camera only")
+            print("   - Basic tracking")
+            
+            choice = input("\nSelect mode (1-2): ").strip()
+            
+            if choice == '1':
+                self.dual_camera_mode = True
+                self.camera_setup = camera_config
+                return self.setup_dual_cameras(exercise_type)
+            else:
+                self.dual_camera_mode = False
+                self.select_camera()
+                return True
+        else:
+            # No dual camera config, use single camera
+            self.dual_camera_mode = False
+            self.select_camera()
+            return True
+
     def select_camera(self):
         """Let user select camera source"""
         print("\n📹 Camera Selection:")
-        print("1. 💻 Laptop Camera (Default)")
-        print("2. 📱 Phone Camera (Iriun/DroidCam)")
-        print("3. 🔧 Custom Camera Index")
+        print("1. 💻 Laptop Camera Only")
+        print("2. 📱 Phone Camera Only")
+        print("3. 🎬 DUAL CAMERA SETUP (Laptop + Sky Camera)")
+        print("4. 🔧 Custom Camera Index")
         
         try:
-            choice = input("\nSelect camera (1-3): ").strip()
+            choice = input("\nSelect camera (1-4): ").strip()
             
             if choice == '1':
-                self.camera_index = 0
-                print("✅ Using laptop camera")
+                self.primary_camera_index = 0
+                self.dual_camera_mode = False
+                print("✅ Using laptop camera only")
             elif choice == '2':
                 # Try common phone camera indices
                 for i in [1, 2, 3]:
                     cap = cv2.VideoCapture(i)
                     if cap.isOpened():
                         cap.release()
-                        self.camera_index = i
+                        self.primary_camera_index = i
+                        self.dual_camera_mode = False
                         print(f"✅ Found phone camera at index {i}")
                         return
                 print("❌ No phone camera found. Make sure Iriun is connected.")
                 print("📱 Using laptop camera as fallback")
-                self.camera_index = 0
+                self.primary_camera_index = 0
+                self.dual_camera_mode = False
             elif choice == '3':
+                self.primary_camera_index = 0      # Laptop camera
+                self.secondary_camera_index = 1    # Sky camera
+                self.dual_camera_mode = True
+                print("✅ Using DUAL CAMERA setup!")
+                print("📹 Primary: Laptop camera (adjustable)")
+                print("🎥 Secondary: Sky camera (overhead)")
+            elif choice == '4':
                 idx = int(input("Enter camera index (0-5): "))
                 cap = cv2.VideoCapture(idx)
                 if cap.isOpened():
                     cap.release()
-                    self.camera_index = idx
+                    self.primary_camera_index = idx
+                    self.dual_camera_mode = False
                     print(f"✅ Using camera index {idx}")
                 else:
                     print(f"❌ Camera {idx} not available. Using default.")
-                    self.camera_index = 0
+                    self.primary_camera_index = 0
+                    self.dual_camera_mode = False
             else:
                 print("❌ Invalid choice. Using laptop camera.")
-                self.camera_index = 0
+                self.primary_camera_index = 0
+                self.dual_camera_mode = False
                 
         except ValueError:
             print("❌ Invalid input. Using laptop camera.")
-            self.camera_index = 0
+            self.primary_camera_index = 0
+            self.dual_camera_mode = False
         except Exception as e:
             print(f"❌ Camera selection error: {e}")
-            self.camera_index = 0
+            self.primary_camera_index = 0
+            self.dual_camera_mode = False
 
     def start_workout_session(self, session_name="Custom Workout"):
         """Start a new workout session"""
@@ -990,7 +1181,7 @@ class MoveNetWorkoutTracker:
             return 0
     
     def track_exercise(self, exercise_type, keypoints):
-        """Simple, reliable exercise tracking"""
+        """Simple, reliable exercise tracking with bilateral support"""
         if exercise_type not in self.exercises:
             return False, 0, 0
         
@@ -998,8 +1189,33 @@ class MoveNetWorkoutTracker:
         current_time = time.time()
         
         try:
+            # Handle bilateral exercises
+            if exercise.get('bilateral', False) and hasattr(self, 'current_side') and self.current_side:
+                if self.current_side in ['left', 'right']:
+                    # Use the specific side's keypoints
+                    kp_names = exercise['sides'][self.current_side]['keypoints']
+                elif self.current_side == 'both':
+                    # For alternating sides, determine which side to track based on rep count
+                    if not hasattr(self, 'alternating_side'):
+                        self.alternating_side = 'left'  # Start with left
+                    
+                    # Switch sides every rep for alternating
+                    current_alternating_side = 'left' if (self.rep_count % 2) == 0 else 'right'
+                    kp_names = exercise['sides'][current_alternating_side]['keypoints']
+                    
+                    # Store which side we're currently tracking for feedback
+                    self.current_tracking_side = current_alternating_side
+                else:
+                    kp_names = exercise.get('keypoints', [])
+            else:
+                # Regular exercise or fallback
+                kp_names = exercise.get('keypoints', [])
+                self.current_tracking_side = None
+            
+            if not kp_names:
+                return False, 0, 0
+            
             # Get keypoint indices
-            kp_names = exercise['keypoints']
             kp_indices = [self.KEYPOINT_DICT[name] for name in kp_names]
             
             # Check if keypoints are detected with sufficient confidence
@@ -1009,8 +1225,27 @@ class MoveNetWorkoutTracker:
                     return False, 0, 0
                 points.append([keypoints[idx][0], keypoints[idx][1]])
             
-            # Calculate angle
-            angle = self.calculate_angle(points[0], points[1], points[2])
+            # Special handling for exercises requiring specific measurements
+            if exercise_type == 'frog_pump':
+                # For frog pump: measure knee width (distance between knees)
+                left_knee = points[0]   # left_knee
+                hip = points[1]         # left_hip  
+                right_knee = points[2]  # right_knee
+                
+                # Calculate knee separation distance
+                knee_distance = math.sqrt((right_knee[0] - left_knee[0])**2 + (right_knee[1] - left_knee[1])**2)
+                
+                # Also calculate hip height relative to knees for thrust movement
+                hip_height_left = abs(hip[1] - left_knee[1])  # Y difference (vertical)
+                hip_height_right = abs(hip[1] - right_knee[1])
+                avg_hip_height = (hip_height_left + hip_height_right) / 2
+                
+                # Use knee distance as primary angle, hip height as secondary
+                angle = knee_distance * 2 + avg_hip_height  # Combined metric
+                
+            else:
+                # Standard 3-point angle calculation
+                angle = self.calculate_angle(points[0], points[1], points[2])
             
             # Add to history for smoothing
             self.angle_history.append(angle)
@@ -1068,6 +1303,12 @@ class MoveNetWorkoutTracker:
         
         return image
     
+    def scale_keypoints_for_frame(self, keypoints, source_shape, target_shape):
+        """Since MoveNet keypoints are normalized (0-1), they work on any frame size"""
+        # MoveNet keypoints are already normalized, so we can use them directly
+        # The draw_keypoints function will handle the scaling to pixel coordinates
+        return keypoints
+    
     def run_workout(self, exercise_type, target_reps=10, target_sets=1, set_number=1):
         """Run workout session with tracking"""
         if exercise_type not in self.exercises:
@@ -1076,16 +1317,58 @@ class MoveNetWorkoutTracker:
         
         exercise = self.exercises[exercise_type]
         
+        # Handle bilateral exercises (left/right sides)
+        selected_side = None
+        if exercise.get('bilateral', False):
+            print(f"\n🔄 {exercise['name']} - Bilateral Exercise")
+            print("Select which side to perform:")
+            print("1. 👈 Left side")
+            print("2. 👉 Right side") 
+            print("3. 🔄 Both sides (alternating)")
+            
+            while True:
+                try:
+                    choice = input("Choose side (1-3): ").strip()
+                    if choice == '1':
+                        selected_side = 'left'
+                        exercise_display_name = exercise['sides']['left']['name']
+                        break
+                    elif choice == '2':
+                        selected_side = 'right'
+                        exercise_display_name = exercise['sides']['right']['name']
+                        break
+                    elif choice == '3':
+                        selected_side = 'both'
+                        exercise_display_name = f"{exercise['name']} (Both Sides)"
+                        break
+                    else:
+                        print("❌ Invalid choice. Please enter 1, 2, or 3.")
+                except KeyboardInterrupt:
+                    print("\n👋 Workout cancelled")
+                    return
+        else:
+            exercise_display_name = exercise['name']
+        
+        # Store the selected side and current exercise configuration
+        self.current_side = selected_side
+        self.current_exercise_config = exercise
+        
+        # Store current workout parameters as instance variables
+        self.current_target_sets = target_sets
+        self.current_set_number = set_number
+        
         # Start tracking if this is the first set
         if set_number == 1:
             self.start_exercise_tracking(exercise_type, target_reps, target_sets)
         
-        print(f"\n🏋️‍♀️ Starting {exercise['name']}")
+        print(f"\n🏋️‍♀️ Starting {exercise_display_name}")
         print(f"📋 {exercise['description']}")
         print(f"🎯 Target: {target_reps} reps")
         
-        # Show camera placement guide
-        self.show_camera_placement_guide(exercise_type)
+        # Setup cameras (dual or single)
+        if not self.select_camera_setup(exercise_type):
+            print("❌ Camera setup failed")
+            return
         
         # Countdown
         for i in range(3, 0, -1):
@@ -1101,111 +1384,77 @@ class MoveNetWorkoutTracker:
         self.last_rep_time = 0
         self.angle_history = []
         
-        # Open camera
-        cap = cv2.VideoCapture(self.camera_index)
-        if not cap.isOpened():
-            print(f"❌ Could not open camera {self.camera_index}")
-            # Try fallback to default camera
-            if self.camera_index != 0:
-                print("🔄 Trying default camera...")
-                cap = cv2.VideoCapture(0)
-                if not cap.isOpened():
-                    print("❌ No cameras available")
-                    return
-            else:
+        # Open camera(s)
+        if self.dual_camera_mode:
+            # Open both cameras
+            primary_cap = cv2.VideoCapture(self.primary_camera_index)
+            secondary_cap = cv2.VideoCapture(self.secondary_camera_index)
+            
+            if not primary_cap.isOpened():
+                print(f"❌ Could not open primary camera {self.primary_camera_index}")
                 return
+            if not secondary_cap.isOpened():
+                print(f"❌ Could not open secondary camera {self.secondary_camera_index}")
+                print("🔄 Falling back to single camera mode")
+                self.dual_camera_mode = False
+                cap = primary_cap
+            else:
+                print("✅ Both cameras opened successfully")
+                # Set camera properties
+                for camera_cap in [primary_cap, secondary_cap]:
+                    camera_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Smaller for dual display
+                    camera_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    camera_cap.set(cv2.CAP_PROP_FPS, 30)
+        else:
+            # Single camera mode
+            cap = cv2.VideoCapture(self.primary_camera_index)
+            if not cap.isOpened():
+                print(f"❌ Could not open camera {self.primary_camera_index}")
+                # Try fallback to default camera
+                if self.primary_camera_index != 0:
+                    print("🔄 Trying default camera...")
+                    cap = cv2.VideoCapture(0)
+                    if not cap.isOpened():
+                        print("❌ No cameras available")
+                        return
+                else:
+                    return
         
         print("📹 Camera started. Press 'q' to quit, 's' to skip to next rep")
         
         while self.rep_count < target_reps:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            
-            # Flip frame
-            frame = cv2.flip(frame, 1)
-            
-            # Get pose
-            keypoints = self.get_pose_landmarks(frame)
-            
-            # Create extended display with text area
-            frame_height, frame_width = frame.shape[:2]
-            text_area_width = 400  # Width for text information
-            extended_width = frame_width + text_area_width
-            
-            # Create extended frame with black background for text area
-            extended_frame = np.zeros((frame_height, extended_width, 3), dtype=np.uint8)
-            
-            # Place original camera frame on the left
-            extended_frame[:, :frame_width] = frame
-            
-            if keypoints is not None:
-                # Draw keypoints on camera frame
-                extended_frame[:, :frame_width] = self.draw_keypoints(frame, keypoints)
+            if self.dual_camera_mode:
+                # Read from both cameras
+                ret1, frame1 = primary_cap.read()
+                ret2, frame2 = secondary_cap.read()
                 
-                # Track exercise
-                rep_completed, form_score, current_angle = self.track_exercise(exercise_type, keypoints)
+                if not ret1 or not ret2:
+                    print("📹 Camera feed lost")
+                    break
                 
-                if rep_completed:
-                    print(f"✅ Rep {self.rep_count} completed! Form: {form_score}%")
-                    self.speak(str(self.rep_count))
-                    # Log the rep completion
-                    self.log_rep_completion(form_score)
+                # Flip frames
+                frame1 = cv2.flip(frame1, 1)
+                frame2 = cv2.flip(frame2, 1)
                 
-                # Display info in the black text area (right side)
-                text_x = frame_width + 20  # Start text 20px into the black area
-                line_height = 35
-                
-                # Exercise information
-                cv2.putText(extended_frame, f"Exercise:", 
-                           (text_x, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                cv2.putText(extended_frame, f"{exercise['name']}", 
-                           (text_x, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                
-                # Rep counter
-                cv2.putText(extended_frame, f"Reps:", 
-                           (text_x, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                cv2.putText(extended_frame, f"{self.rep_count}/{target_reps}", 
-                           (text_x, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-                
-                # Current angle
-                cv2.putText(extended_frame, f"Angle:", 
-                           (text_x, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                cv2.putText(extended_frame, f"{current_angle:.1f}°", 
-                           (text_x, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-                
-                # Movement state
-                cv2.putText(extended_frame, f"State:", 
-                           (text_x, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                cv2.putText(extended_frame, f"{self.state}", 
-                           (text_x, 310), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
-                
-                # Form score (if available)
-                if hasattr(self, 'last_form_score') and self.last_form_score is not None:
-                    cv2.putText(extended_frame, f"Form Score:", 
-                               (text_x, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                    color = (0, 255, 0) if self.last_form_score >= 80 else (0, 255, 255) if self.last_form_score >= 60 else (0, 0, 255)
-                    cv2.putText(extended_frame, f"{self.last_form_score}%", 
-                               (text_x, 390), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-                
-                # Instructions
-                cv2.putText(extended_frame, "Controls:", 
-                           (text_x, 450), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
-                cv2.putText(extended_frame, "Q - Quit", 
-                           (text_x, 480), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-                cv2.putText(extended_frame, "S - Skip Rep", 
-                           (text_x, 500), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+                # Create dual camera display (will handle pose detection internally)
+                self.display_dual_camera_feed(frame1, frame2, None, exercise, target_reps, exercise_type)
                 
             else:
-                # No pose detected - show warning in text area
-                text_x = frame_width + 20
-                cv2.putText(extended_frame, "⚠ POSITION YOURSELF", 
-                           (text_x, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                cv2.putText(extended_frame, "IN CAMERA FRAME", 
-                           (text_x, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                # Single camera mode
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Flip frame
+                frame = cv2.flip(frame, 1)
+                
+                # Get pose
+                keypoints = self.get_pose_landmarks(frame)
+                
+                # Create extended display with text area
+                self.display_single_camera_feed(frame, keypoints, exercise, target_reps, exercise_type)
             
-            cv2.imshow('MoveNet Workout Tracker', extended_frame)
-            
+            # Handle keyboard input
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break
@@ -1214,7 +1463,12 @@ class MoveNetWorkoutTracker:
                 print(f"⏭️ Skipped to rep {self.rep_count}")
                 self.speak(str(self.rep_count))
         
-        cap.release()
+        # Cleanup cameras
+        if self.dual_camera_mode:
+            primary_cap.release()
+            secondary_cap.release()
+        else:
+            cap.release()
         cv2.destroyAllWindows()
         
         # Mark set as completed if target reps reached
@@ -1224,10 +1478,174 @@ class MoveNetWorkoutTracker:
             self.complete_exercise_set()
         else:
             print(f"\n⏹️ Set stopped at {self.rep_count} reps")
+
+    def display_single_camera_feed(self, frame, keypoints, exercise, target_reps, exercise_type):
+        """Display single camera feed with extended text area"""
+        frame_height, frame_width = frame.shape[:2]
+        text_area_width = 400
+        extended_width = frame_width + text_area_width
         
-        # Finish exercise tracking if this was the last set
-        if set_number >= target_sets:
-            self.finish_exercise_tracking()
+        # Create extended frame with black background for text area
+        extended_frame = np.zeros((frame_height, extended_width, 3), dtype=np.uint8)
+        extended_frame[:, :frame_width] = frame
+        
+        if keypoints is not None:
+            # Draw keypoints on camera frame
+            extended_frame[:, :frame_width] = self.draw_keypoints(frame, keypoints)
+            
+            # Track exercise
+            rep_completed, form_score, current_angle = self.track_exercise(exercise_type, keypoints)
+            
+            if rep_completed:
+                # Add side information for bilateral exercises
+                side_info = ""
+                if hasattr(self, 'current_tracking_side') and self.current_tracking_side:
+                    side_info = f" ({self.current_tracking_side.upper()} side)"
+                
+                print(f"✅ Rep {self.rep_count} completed! Form: {form_score}%{side_info}")
+                self.speak(str(self.rep_count))
+                self.log_rep_completion(form_score)
+            
+            # Display info in text area
+            self.add_text_overlay(extended_frame, frame_width, exercise, target_reps, current_angle)
+        else:
+            # No pose detected
+            text_x = frame_width + 20
+            cv2.putText(extended_frame, "⚠ POSITION YOURSELF", 
+                       (text_x, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(extended_frame, "IN CAMERA FRAME", 
+                       (text_x, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        
+        cv2.imshow('MoveNet Workout Tracker', extended_frame)
+
+    def display_dual_camera_feed(self, frame1, frame2, keypoints, exercise, target_reps, exercise_type):
+        """Display dual camera feed side by side with independent pose detection"""
+        h1, w1 = frame1.shape[:2]
+        h2, w2 = frame2.shape[:2]
+        
+        # Resize frames to same height
+        target_height = 400
+        new_w1 = int(w1 * target_height / h1)
+        new_w2 = int(w2 * target_height / h2)
+        
+        frame1_resized = cv2.resize(frame1, (new_w1, target_height))
+        frame2_resized = cv2.resize(frame2, (new_w2, target_height))
+        
+        # Create combined display
+        total_width = new_w1 + new_w2 + 300  # Extra space for text
+        combined_frame = np.zeros((target_height, total_width, 3), dtype=np.uint8)
+        
+        # Get pose from both cameras independently
+        keypoints1 = self.get_pose_landmarks(frame1_resized)
+        keypoints2 = self.get_pose_landmarks(frame2_resized)
+        
+        # Draw pose keypoints on both cameras
+        frame1_with_pose = self.draw_keypoints(frame1_resized, keypoints1) if keypoints1 is not None else frame1_resized
+        frame2_with_pose = self.draw_keypoints(frame2_resized, keypoints2) if keypoints2 is not None else frame2_resized
+        
+        # Place frames in combined display
+        combined_frame[:, :new_w1] = frame1_with_pose
+        combined_frame[:, new_w1:new_w1+new_w2] = frame2_with_pose
+        
+        # Intelligent camera selection based on exercise type
+        exercise_config = self.exercises.get(exercise_type, {})
+        camera_setup = exercise_config.get('camera_setup', {})
+        
+        # Determine which camera to use for tracking based on exercise configuration
+        if camera_setup.get('primary') == 'overhead' and keypoints2 is not None:
+            # Use overhead (secondary) camera for tracking
+            tracking_keypoints = keypoints2
+            primary_cam_for_tracking = False
+        elif keypoints1 is not None:
+            # Use laptop (primary) camera for tracking
+            tracking_keypoints = keypoints1
+            primary_cam_for_tracking = True
+        elif keypoints2 is not None:
+            # Fallback to secondary camera if primary fails
+            tracking_keypoints = keypoints2
+            primary_cam_for_tracking = False
+        else:
+            tracking_keypoints = None
+            primary_cam_for_tracking = True
+        
+        if tracking_keypoints is not None:
+            # Track exercise using the selected keypoints
+            rep_completed, form_score, current_angle = self.track_exercise(exercise_type, tracking_keypoints)
+            
+            if rep_completed:
+                cam_source = "OVERHEAD" if not primary_cam_for_tracking else "LAPTOP"
+                
+                # Add side information for bilateral exercises
+                side_info = ""
+                if hasattr(self, 'current_tracking_side') and self.current_tracking_side:
+                    side_info = f" - {self.current_tracking_side.upper()} side"
+                
+                print(f"✅ Rep {self.rep_count} completed! Form: {form_score}% (via {cam_source} camera{side_info})")
+                self.speak(str(self.rep_count))
+                self.log_rep_completion(form_score)
+            
+            # Add text overlay
+            self.add_text_overlay(combined_frame, new_w1 + new_w2, exercise, target_reps, current_angle)
+            
+            # Add camera labels with pose detection and tracking status
+            primary_status = "✅ POSE" if keypoints1 is not None else "❌ NO POSE"
+            secondary_status = "✅ POSE" if keypoints2 is not None else "❌ NO POSE"
+            
+            if keypoints1 is not None or keypoints2 is not None:
+                tracking_status = " 🎯 TRACKING" if not primary_cam_for_tracking else " 🎯 TRACKING"
+                if not primary_cam_for_tracking:
+                    secondary_status += tracking_status
+                else:
+                    primary_status += tracking_status
+            
+            cv2.putText(combined_frame, f"PRIMARY {primary_status}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.putText(combined_frame, f"SECONDARY {secondary_status}", (new_w1 + 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
+        
+        cv2.imshow('Dual Camera Workout Tracker', combined_frame)
+
+    def add_text_overlay(self, frame, text_start_x, exercise, target_reps, current_angle):
+        """Add text information overlay"""
+        text_x = text_start_x + 20
+        
+        # Exercise information
+        cv2.putText(frame, f"Exercise:", 
+                   (text_x, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, f"{exercise['name']}", 
+                   (text_x, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        
+        # Rep counter
+        cv2.putText(frame, f"Reps:", 
+                   (text_x, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, f"{self.rep_count}/{target_reps}", 
+                   (text_x, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        
+        # Current angle/measurement
+        cv2.putText(frame, f"Measurement:", 
+                   (text_x, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, f"{current_angle:.1f}", 
+                   (text_x, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        
+        # Movement state
+        cv2.putText(frame, f"State:", 
+                   (text_x, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, f"{self.state}", 
+                   (text_x, 310), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
+        
+        # Form score
+        if hasattr(self, 'last_form_score') and self.last_form_score is not None:
+            cv2.putText(frame, f"Form Score:", 
+                       (text_x, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            color = (0, 255, 0) if self.last_form_score >= 80 else (0, 255, 255) if self.last_form_score >= 60 else (0, 0, 255)
+            cv2.putText(frame, f"{self.last_form_score}%", 
+                       (text_x, 390), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+        
+        # Current tracking side for bilateral exercises
+        if hasattr(self, 'current_tracking_side') and self.current_tracking_side:
+            cv2.putText(frame, f"Tracking Side:", 
+                       (text_x, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            side_color = (255, 0, 255) if self.current_tracking_side == 'left' else (0, 255, 255)
+            cv2.putText(frame, f"{self.current_tracking_side.upper()}", 
+                       (text_x, 470), cv2.FONT_HERSHEY_SIMPLEX, 0.6, side_color, 2)
     
     def load_workout_from_json(self, filename):
         """Load workout from JSON file"""
