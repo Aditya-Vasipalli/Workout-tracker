@@ -117,7 +117,7 @@ class EnhancedWorkoutTracker:
                 self.tts_engine.say("Voice test - ready to workout")
                 self.tts_engine.runAndWait()
             else:
-                print("  ⚠️  No clearly female voice found, using default")
+                print("  ⚠️  No voice found, using default")
                 
             self.tts_engine.setProperty('rate', 150)
             self.tts_engine.setProperty('volume', 0.9)

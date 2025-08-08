@@ -22,34 +22,49 @@ class MoveNetWorkoutTracker:
         self.input_details = None
         self.output_details = None
         self.setup_movenet()
-        
+
         # Initialize TTS
         self.tts_engine = None
         self.setup_tts()
-        
+
         # Camera selection
-        self.primary_camera_index = 0    # Laptop camera (adjustable)
+        self.primary_camera_index = 0  # Laptop camera (adjustable)
         self.secondary_camera_index = 1  # Overhead/sky camera (fixed)
-        self.dual_camera_mode = False    # Enable dual camera tracking
-        self.camera_setup = None         # Store current camera configuration
-        
-        # Exercise tracking
+        self.dual_camera_mode = False  # Enable dual camera tracking
+        self.camera_setup = None  # Store current camera configuration
+
+        # Exercise tracking - stricter parameters for better form validation
         self.rep_count = 0
         self.state = 'down'
         self.last_rep_time = 0
         self.min_rep_time = 1.2
         self.angle_history = []
-        self.confidence_threshold = 0.3
+        self.confidence_threshold = 0.4  # Increased from 0.3 - require higher confidence for strict form
         self.last_form_score = None  # Track last form score for display
-        
-        # Progressive tracking system for strict form validation
-        self.progressive_states = []  # Track angle progression: [180°, 150°, 90°, 60°]
-        self.progression_thresholds = [180, 150, 90, 60]  # Default thresholds
-        self.current_progression = 0  # Current stage in progression
-        self.progression_direction = 'down'  # 'down' or 'up'
-        self.strict_form_enabled = False  # Enable strict progressive validation
-        self.progression_start_time = 0  # Time when progression started
-        
+
+        # HOLD REQUIREMENTS TRACKING - Critical for proper exercise execution
+        self.position_hold_start = 0  # When we entered the target position
+        self.current_hold_duration = 0  # How long we've been holding
+        self.hold_requirements_met = False  # Did we meet the hold requirement
+        self.target_position_stable = False  # Are we in the stable target position
+        self.last_stable_angle = 0  # Last angle when position was stable
+        self.position_stability_buffer = []  # Buffer to check position stability
+        self.hold_angle_tolerance = 25  # Degrees of movement allowed during hold - more forgiving for vision jitter
+
+        # HOLD PHASE MANAGEMENT - Separate from normal rep counting
+        self.hold_phase_active = False  # Are we currently in a hold phase
+        self.hold_phase_start_time = None  # When the hold phase started
+        self.hold_phase_exercise = None  # Which exercise we're holding for
+        self.rep_pending_hold = False  # Rep completed, waiting for hold
+
+        # Progressive tracking system (enabled by default)
+        self.progressive_states = []
+        self.progression_thresholds = [180, 150, 90, 60]
+        self.current_progression = 0
+        self.progression_direction = 'down'
+        self.strict_form_enabled = True
+        self.progression_start_time = 0
+
         # Workout session tracking
         self.current_session = {
             'start_time': None,
@@ -69,6 +84,9 @@ class MoveNetWorkoutTracker:
             'end_time': None,
             'duration': 0
         }
+        
+        # Current exercise tracking
+        self.current_exercise = None
         
         # Keypoint indices for MoveNet (17 keypoints)
         self.KEYPOINT_DICT = {
@@ -91,6 +109,12 @@ class MoveNetWorkoutTracker:
                 'down_threshold': 140,
                 'up_threshold': 170,
                 'description': 'Lie down, lift hips up. Add pause at top for intensity',
+                'hold_requirements': {
+                    'top_hold': 3.0,  # Must hold at top for 3 seconds
+                    'position_check': 'spine_straight',  # Must have straight spine
+                    'angle_requirement': 90,  # Knees at 90 degrees
+                    'stability_required': True  # Position must be stable during hold
+                },
                 'camera_setup': {
                     'primary': 'side',          # Laptop camera for hip extension depth
                     'secondary': 'overhead',    # Sky camera for hip/knee alignment
@@ -107,7 +131,13 @@ class MoveNetWorkoutTracker:
                 'keypoints': ['left_shoulder', 'left_hip', 'left_knee'],
                 'down_threshold': 130,
                 'up_threshold': 170,
-                'description': 'Back on bench, feet shoulder width, spine neutral'
+                'description': 'Back on bench, feet shoulder width, spine neutral',
+                'hold_requirements': {
+                    'top_hold': 3.0,  # Must hold at top for 3 seconds
+                    'position_check': 'spine_straight',  # Must have straight spine
+                    'angle_requirement': 90,  # Knees at 90 degrees
+                    'stability_required': True  # Position must be stable during hold
+                }
             },
             'frog_pump': {
                 'name': 'Frog Pump',
@@ -259,7 +289,14 @@ class MoveNetWorkoutTracker:
                 'keypoints': ['left_shoulder', 'left_elbow', 'left_wrist'],
                 'down_threshold': 160,
                 'up_threshold': 60,
-                'description': 'Full range, no swinging'
+                'description': 'Full range, no swinging',
+                'hold_requirements': {
+                    'top_hold': 1.0,  # Reduced from 2.0 - Hold at peak contraction for 1 second only
+                    'position_check': 'bicep_peak',  # Must be at peak bicep contraction
+                    'angle_requirement': 50,  # Target angle to maintain
+                    'stability_required': False,  # Disable strict stability requirement
+                    'full_contraction': True  # Must reach full bicep contraction
+                }
             },
             'hammer_curl': {
                 'name': 'Hammer Curl',
@@ -316,7 +353,14 @@ class MoveNetWorkoutTracker:
                 'keypoints': ['left_shoulder', 'left_hip', 'left_ankle'],
                 'down_threshold': 170,
                 'up_threshold': 180,
-                'description': 'Elbows under shoulders'
+                'description': 'Elbows under shoulders',
+                'hold_requirements': {
+                    'position_hold': 10.0,  # Must hold plank for 10 seconds minimum
+                    'position_check': 'plank_straight',  # Must maintain straight line
+                    'angle_requirement': 180,  # Straight line from head to heels
+                    'stability_required': True,  # Must be very stable
+                    'core_engaged': True  # Core must be engaged
+                }
             },
             'side_plank': {
                 'name': 'Side Plank',
@@ -362,7 +406,14 @@ class MoveNetWorkoutTracker:
                 'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
                 'down_threshold': 90,
                 'up_threshold': 160,
-                'description': 'Chest up, knees out'
+                'description': 'Chest up, knees out',
+                'hold_requirements': {
+                    'bottom_hold': 3.0,  # Must hold at bottom for 3 seconds
+                    'position_check': 'squat_depth',  # Must achieve proper depth
+                    'angle_requirement': 90,  # Hip-knee-ankle at 90 degrees
+                    'stability_required': True,  # Must be stable during hold
+                    'knees_out': True  # Knees must track over toes
+                }
             },
             'sumo_squat': {
                 'name': 'Sumo Squat',
@@ -373,7 +424,14 @@ class MoveNetWorkoutTracker:
                 'keypoints': ['left_hip', 'left_knee', 'left_ankle'],
                 'down_threshold': 90,
                 'up_threshold': 160,
-                'description': 'Toes out, wide stance'
+                'description': 'Toes out, wide stance',
+                'hold_requirements': {
+                    'bottom_hold': 3.0,  # Must hold at bottom for 3 seconds
+                    'position_check': 'squat_depth',  # Must achieve proper depth
+                    'angle_requirement': 90,  # Hip-knee-ankle at 90 degrees
+                    'stability_required': True,  # Must be stable during hold
+                    'wide_stance': True  # Wide stance required
+                }
             },
             'romanian_deadlift': {
                 'name': 'Romanian Deadlift',
@@ -405,10 +463,18 @@ class MoveNetWorkoutTracker:
                 'equipment': 'Bodyweight/Dumbbell',
                 'difficulty': 'Beginner',
                 'type': 'Strength',
-                'keypoints': ['left_knee', 'left_ankle', 'left_ankle'],  # Special handling needed
-                'down_threshold': 120,
-                'up_threshold': 140,
-                'description': 'Hold at top'
+                'keypoints': ['left_knee', 'left_ankle', 'left_ankle'],  # Will use special height calculation
+                'down_threshold': 0.1,   # Flat foot position (low positive)
+                'up_threshold': 1.2,     # Tippy toe position (high positive)
+                'description': 'Hold at top (tippy toes)',
+                'special_tracking': 'calf_height',  # Use ankle height instead of angle
+                'hold_requirements': {
+                    'top_hold': 5.0,  # Must hold on tippy toes for 5 seconds
+                    'position_check': 'calf_extension',  # Must be on tippy toes
+                    'height_requirement': 1.0,  # Target positive value for tippy toes
+                    'stability_required': True,  # Must maintain balance
+                    'full_extension': True  # Must reach full tippy toe position
+                }
             },
             'dumbbell_lunge': {
                 'name': 'Dumbbell Lunge',
@@ -472,6 +538,13 @@ class MoveNetWorkoutTracker:
                     'elbow_stability': True,
                     'controlled_movement': True,
                     'full_range': True
+                },
+                'hold_requirements': {
+                    'top_hold': 2.0,  # Must hold at top contraction for 2 seconds
+                    'position_check': 'bicep_peak',  # Must achieve full contraction
+                    'angle_requirement': 50,  # Full flexion angle
+                    'stability_required': True,  # Must control the weight
+                    'squeeze_muscle': True  # Must squeeze at the top
                 },
                 'min_rep_time': 1.5,  # Minimum time for one rep
                 'camera_setup': {
@@ -550,7 +623,7 @@ class MoveNetWorkoutTracker:
             test_command = '''
             Add-Type -AssemblyName System.Speech;
             $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer;
-            $synth.Speak("Test");
+            $synth.Speak("Starting workout");
             '''
             
             result = subprocess.run([
@@ -594,13 +667,6 @@ class MoveNetWorkoutTracker:
         self.strict_form_enabled = enabled
         if enabled:
             self.reset_progression()
-            print("✅ Strict progressive form validation ENABLED")
-            print("   - Requires full 180°→150°→90°→60°→90°→150°→180° progression")
-            print("   - Prevents false reps from random movement")
-            print("   - Ensures proper form and controlled movement")
-        else:
-            print("⚠️ Strict progressive form validation DISABLED")
-            print("   - Using basic angle-based rep counting")
         return enabled
     
     def speak(self, text):
@@ -987,6 +1053,7 @@ class MoveNetWorkoutTracker:
     def start_exercise_tracking(self, exercise_type, target_reps, target_sets=1):
         """Start tracking a new exercise"""
         exercise = self.exercises.get(exercise_type, {})
+        self.current_exercise = exercise_type  # Set current exercise for hold requirements
         self.current_exercise_data = {
             'exercise_name': exercise.get('name', exercise_type),
             'exercise_type': exercise_type,
@@ -1231,36 +1298,723 @@ class MoveNetWorkoutTracker:
             
         except:
             return 0
+
+    def safe_angle_by_names(self, keypoints, names_triplet):
+        """Compute angle for a (name1, name2, name3) triplet using available keypoints.
+        Returns (angle, available) where available is True if all three had sufficient confidence.
+        """
+        try:
+            idxs = [self.KEYPOINT_DICT[n] for n in names_triplet]
+            pts = []
+            for idx in idxs:
+                y, x, conf = keypoints[idx]
+                if conf < self.confidence_threshold:
+                    return 0, False
+                pts.append((y, x))
+            return self.calculate_angle(pts[0], pts[1], pts[2]), True
+        except Exception:
+            return 0, False
+
+    def spine_straight_score(self, keypoints, side='left'):
+        """Estimate spine straightness using ear->shoulder->hip and shoulder->hip->knee.
+        Returns score 0-100 based on how near 180° the torso chain angles are, or None if unreliable."""
+        shoulder = 'left_shoulder' if side == 'left' else 'right_shoulder'
+        hip = 'left_hip' if side == 'left' else 'right_hip'
+        ear = 'left_ear' if side == 'left' else 'right_ear'
+        knee = 'left_knee' if side == 'left' else 'right_knee'
+        
+        a1, ok1 = self.safe_angle_by_names(keypoints, (ear, shoulder, hip))
+        a2, ok2 = self.safe_angle_by_names(keypoints, (shoulder, hip, knee))
+        
+        scores = []
+        if ok1:
+            # Much stricter scoring - penalize heavily for deviation from 180°
+            deviation1 = abs(180 - a1)
+            score1 = max(0, 100 - (deviation1 * 3))  # 3% penalty per degree
+            scores.append(score1)
+        if ok2:
+            deviation2 = abs(180 - a2)
+            score2 = max(0, 100 - (deviation2 * 3))  # 3% penalty per degree
+            scores.append(score2)
+            
+        if not scores:
+            return None  # No reliable data
+        
+        avg_score = sum(scores) / len(scores)
+        return int(avg_score) if avg_score >= 20 else 10  # Minimum score for poor form
+
+    def pelvis_tuck_score(self, keypoints, side='left'):
+        """Rough proxy for posterior pelvic tilt: angle hip-shoulder-knee near 180 and hip below shoulder vertically.
+        Returns 0-100 score, or None if unreliable. Conservative to avoid false positives."""
+        shoulder = 'left_shoulder' if side == 'left' else 'right_shoulder'
+        hip = 'left_hip' if side == 'left' else 'right_hip'
+        knee = 'left_knee' if side == 'left' else 'right_knee'
+        
+        ang, ok = self.safe_angle_by_names(keypoints, (shoulder, hip, knee))
+        if not ok:
+            return None  # No reliable data
+            
+        # Much stricter pelvis evaluation
+        deviation = abs(180 - ang)
+        score = max(0, 100 - (deviation * 4))  # 4% penalty per degree
+        return int(score) if score >= 15 else 5  # Minimum score for poor form
+        # Favor straighter torso/leg alignment
+        score = max(0, 100 - abs(180 - ang))
+        return int(score)
+    
+    def knee_angle_score(self, keypoints, side='left', target_angle=90):
+        """Check if knee is at proper angle (default 90 degrees for quadruped positions).
+        Returns score 0-100, or None if unreliable data."""
+        hip = 'left_hip' if side == 'left' else 'right_hip'
+        knee = 'left_knee' if side == 'left' else 'right_knee'
+        ankle = 'left_ankle' if side == 'left' else 'right_ankle'
+        ang, ok = self.safe_angle_by_names(keypoints, (hip, knee, ankle))
+        if not ok:
+            return None  # No reliable data
+        
+        # Much stricter knee angle scoring
+        deviation = abs(ang - target_angle)
+        if deviation > 60:  # If deviation is extreme, very low score
+            return 5
+        
+        score = max(0, 100 - (deviation * 3))  # 3% penalty per degree off (stricter)
+        return int(score) if score >= 15 else 5  # Minimum score for poor form
+    
+    def shoulder_stability_score(self, keypoints):
+        """Check shoulder alignment and stability for upper body exercises.
+        Returns score 0-100, or None if unreliable data."""
+        left_shoulder = keypoints[self.KEYPOINT_DICT['left_shoulder']]
+        right_shoulder = keypoints[self.KEYPOINT_DICT['right_shoulder']]
+        
+        if left_shoulder[2] < self.confidence_threshold or right_shoulder[2] < self.confidence_threshold:
+            return None  # Unreliable data
+        
+        # Much stricter shoulder level check
+        shoulder_level_diff = abs(left_shoulder[0] - right_shoulder[0])
+        if shoulder_level_diff > 0.05:  # If shoulders are very unlevel
+            return 5
+            
+        level_score = max(0, 100 - (shoulder_level_diff * 2000))  # Very strict penalty
+        return int(level_score) if level_score >= 20 else 10  # Minimum score for poor form
+    
+    def core_engagement_score(self, keypoints):
+        """Estimate core engagement by checking torso stability.
+        Returns score 0-100, or None if unreliable data."""
+        try:
+            # Use shoulder-hip-knee angle on both sides
+            left_score = self.spine_straight_score(keypoints, 'left')
+            right_score = self.spine_straight_score(keypoints, 'right')
+            
+            # Also check hip-shoulder alignment
+            left_hip = keypoints[self.KEYPOINT_DICT['left_hip']]
+            right_hip = keypoints[self.KEYPOINT_DICT['right_hip']]
+            left_shoulder = keypoints[self.KEYPOINT_DICT['left_shoulder']]
+            right_shoulder = keypoints[self.KEYPOINT_DICT['right_shoulder']]
+            
+            if (left_hip[2] > self.confidence_threshold and right_hip[2] > self.confidence_threshold and 
+                left_shoulder[2] > self.confidence_threshold and right_shoulder[2] > self.confidence_threshold):
+                
+                # Much stricter hip level check
+                hip_level = abs(left_hip[0] - right_hip[0])
+                if hip_level > 0.05:  # If hips are very unlevel
+                    hip_score = 5
+                else:
+                    hip_score = max(0, 100 - (hip_level * 2000))  # Very strict penalty
+                
+                # Only use valid scores (not None)
+                valid_scores = [s for s in [left_score, right_score] if s is not None]
+                if valid_scores:
+                    valid_scores.append(hip_score)
+                    avg_score = sum(valid_scores) / len(valid_scores)
+                    return int(avg_score) if avg_score >= 15 else 5  # Minimum score for poor form
+                else:
+                    return None  # No reliable spine data
+            
+            # Fallback to spine scores only
+            valid_scores = [s for s in [left_score, right_score] if s is not None]
+            if not valid_scores:
+                return None  # No reliable data
+            
+            avg_score = sum(valid_scores) / len(valid_scores)
+            return int(avg_score) if avg_score >= 15 else 5  # Minimum score for poor form
+            
+        except Exception:
+            return None  # Error indicates unreliable data
+    
+    def leg_alignment_score(self, keypoints, side='left'):
+        """Check proper leg alignment (hip-knee-ankle in line).
+        Returns score 0-100, or None if unreliable data."""
+        hip = 'left_hip' if side == 'left' else 'right_hip'
+        knee = 'left_knee' if side == 'left' else 'right_knee'
+        ankle = 'left_ankle' if side == 'left' else 'right_ankle'
+        
+        ang, ok = self.safe_angle_by_names(keypoints, (hip, knee, ankle))
+        if not ok:
+            return None  # No reliable data
+        
+        # Much stricter leg alignment scoring
+        deviation = abs(180 - ang)
+        if deviation > 45:  # Extreme misalignment
+            return 5
+            
+        score = max(0, 100 - (deviation * 3))  # 3% penalty per degree (stricter)
+        return int(score) if score >= 20 else 10  # Minimum score for poor form
+        return int(score)
+    
+    def squat_depth_score(self, keypoints, side='left'):
+        """Check squat depth by measuring knee angle.
+        Returns score 0-100, or None if unreliable data."""
+        score = self.knee_angle_score(keypoints, side, target_angle=90)
+        # For squats, deeper is generally better (closer to 90 degrees)
+        return score
+    
+    def overhead_position_score(self, keypoints, side='left'):
+        """Check if arms are properly overhead (for shoulder press, overhead squat).
+        Returns score 0-100, or None if unreliable data."""
+        shoulder = 'left_shoulder' if side == 'left' else 'right_shoulder'
+        elbow = 'left_elbow' if side == 'left' else 'right_elbow'
+        wrist = 'left_wrist' if side == 'left' else 'right_wrist'
+        
+        ang, ok = self.safe_angle_by_names(keypoints, (shoulder, elbow, wrist))
+        if not ok:
+            return None  # No reliable data
+            
+        # For overhead position, arm should be close to 180° (straight up)
+        deviation = abs(180 - ang)
+        if deviation > 45:  # Poor overhead position
+            return 5
+            
+        score = max(0, 100 - (deviation * 3))  # 3% penalty per degree
+        return int(score) if score >= 20 else 10  # Minimum score for poor form
+    
+    def squat_knee_tracking_score(self, keypoints, side='left'):
+        """Check if knees track properly and don't go over toes in squats.
+        Returns score 0-100, or None if unreliable data."""
+        try:
+            knee_key = 'left_knee' if side == 'left' else 'right_knee'
+            ankle_key = 'left_ankle' if side == 'left' else 'right_ankle'
+            
+            knee_idx = self.KEYPOINT_DICT[knee_key]
+            ankle_idx = self.KEYPOINT_DICT[ankle_key]
+            
+            if (keypoints[knee_idx][2] < self.confidence_threshold or 
+                keypoints[ankle_idx][2] < self.confidence_threshold):
+                return None  # Unreliable data
+            
+            # Get knee and ankle positions (y, x coordinates)
+            knee_y, knee_x = keypoints[knee_idx][0], keypoints[knee_idx][1]
+            ankle_y, ankle_x = keypoints[ankle_idx][0], keypoints[ankle_idx][1]
+            
+            # Check if knee goes over toe (knee_x should not exceed ankle_x significantly)
+            horizontal_offset = abs(knee_x - ankle_x)
+            
+            # Penalize heavily if knee goes too far forward
+            if horizontal_offset > 0.1:  # Knee significantly over toes
+                return 5  # Very poor form
+            elif horizontal_offset > 0.05:  # Moderate knee forward tracking
+                return 30  # Poor form
+            else:
+                # Good knee tracking
+                score = max(50, 100 - (horizontal_offset * 1000))
+                return int(score)
+                
+        except Exception:
+            return None  # Error indicates unreliable data
+    
+    def squat_depth_and_form_score(self, keypoints, side='left'):
+        """Comprehensive squat form checking: depth + knee tracking + alignment.
+        Returns score 0-100, or None if unreliable data."""
+        try:
+            # Get individual scores
+            depth_score = self.squat_depth_score(keypoints, side)
+            knee_tracking_score = self.squat_knee_tracking_score(keypoints, side)
+            alignment_score = self.leg_alignment_score(keypoints, side)
+            
+            # Only use valid scores
+            valid_scores = [s for s in [depth_score, knee_tracking_score, alignment_score] if s is not None]
+            
+            if len(valid_scores) < 2:  # Need at least 2 measurements
+                return None
+            
+            # Weight the scores (knee tracking is most important for safety)
+            if knee_tracking_score is not None and knee_tracking_score < 20:
+                # Heavily penalize poor knee tracking (safety issue)
+                return max(5, int(sum(valid_scores) / len(valid_scores) * 0.3))
+            else:
+                return int(sum(valid_scores) / len(valid_scores))
+        except Exception:
+            return None
+
+    def deadlift_form_score(self, keypoints):
+        """Comprehensive Romanian deadlift form validation: arms, hips, legs, spine.
+        Returns score 0-100, or None if unreliable data."""
+        # Check spine alignment (ear-shoulder-hip)
+        spine_score = self.spine_straight_score(keypoints)
+        
+        # Check knee stability (should stay slightly bent, not lock out)
+        left_knee_score = self.knee_angle_score(keypoints, 'left', target_angle=170)  # Slight bend
+        right_knee_score = self.knee_angle_score(keypoints, 'right', target_angle=170)
+        
+        # Check hip hinge (shoulder-hip-knee should form proper hinge)
+        hip_hinge_left, ok1 = self.safe_angle_by_names(keypoints, ('left_shoulder', 'left_hip', 'left_knee'))
+        hip_hinge_right, ok2 = self.safe_angle_by_names(keypoints, ('right_shoulder', 'right_hip', 'right_knee'))
+        
+        hip_hinge_score = None
+        if ok1 or ok2:
+            # Use available side, prefer bilateral average
+            if ok1 and ok2:
+                avg_hinge = (hip_hinge_left + hip_hinge_right) / 2
+            elif ok1:
+                avg_hinge = hip_hinge_left
+            else:
+                avg_hinge = hip_hinge_right
+                
+            # Good deadlift hip hinge around 90-120 degrees
+            if 90 <= avg_hinge <= 120:
+                hip_hinge_score = 90
+            elif 80 <= avg_hinge <= 130:
+                hip_hinge_score = 70
+            elif 70 <= avg_hinge <= 140:
+                hip_hinge_score = 50
+            else:
+                hip_hinge_score = 20
+        
+        # Check arm position (should hang straight down)
+        left_arm_score = None
+        right_arm_score = None
+        
+        # Left arm: shoulder-elbow-wrist should be straight (~180°)
+        left_arm_angle, ok_left_arm = self.safe_angle_by_names(keypoints, ('left_shoulder', 'left_elbow', 'left_wrist'))
+        if ok_left_arm:
+            deviation = abs(180 - left_arm_angle)
+            left_arm_score = max(20, 100 - (deviation * 3))  # 3% penalty per degree
+            
+        # Right arm: shoulder-elbow-wrist should be straight (~180°)
+        right_arm_angle, ok_right_arm = self.safe_angle_by_names(keypoints, ('right_shoulder', 'right_elbow', 'right_wrist'))
+        if ok_right_arm:
+            deviation = abs(180 - right_arm_angle)
+            right_arm_score = max(20, 100 - (deviation * 3))  # 3% penalty per degree
+        
+        # Collect all valid scores
+        valid_scores = []
+        if spine_score is not None:
+            valid_scores.append(spine_score)
+        if left_knee_score is not None:
+            valid_scores.append(left_knee_score)
+        if right_knee_score is not None:
+            valid_scores.append(right_knee_score)
+        if hip_hinge_score is not None:
+            valid_scores.append(hip_hinge_score)
+        if left_arm_score is not None:
+            valid_scores.append(left_arm_score)
+        if right_arm_score is not None:
+            valid_scores.append(right_arm_score)
+            
+        if len(valid_scores) < 3:  # Need at least 3 measurements for deadlift
+            return None
+            
+        # Return average of all valid measurements
+        return int(sum(valid_scores) / len(valid_scores))
+
+    def frog_pump_pelvic_score(self, keypoints):
+        """Check pelvic angle and knee separation for frog pumps.
+        Returns score 0-100, or None if unreliable data."""
+        # Check hip height (pelvis should lift up)
+        left_hip = keypoints[self.KEYPOINT_DICT['left_hip']]
+        right_hip = keypoints[self.KEYPOINT_DICT['right_hip']]
+        left_shoulder = keypoints[self.KEYPOINT_DICT['left_shoulder']]
+        right_shoulder = keypoints[self.KEYPOINT_DICT['right_shoulder']]
+        
+        if (left_hip[2] < self.confidence_threshold or right_hip[2] < self.confidence_threshold or
+            left_shoulder[2] < self.confidence_threshold or right_shoulder[2] < self.confidence_threshold):
+            return None
+            
+        # Calculate hip elevation relative to shoulders
+        avg_hip_y = (left_hip[0] + right_hip[0]) / 2
+        avg_shoulder_y = (left_shoulder[0] + right_shoulder[0]) / 2
+        
+        # In frog pump, hips should be elevated above shoulders when viewed from side
+        hip_elevation = avg_shoulder_y - avg_hip_y  # Positive means hips are above shoulders
+        
+        if hip_elevation > 0.1:  # Good hip elevation
+            elevation_score = 90
+        elif hip_elevation > 0.05:  # Moderate elevation
+            elevation_score = 70
+        elif hip_elevation > 0:  # Slight elevation
+            elevation_score = 50
+        else:  # No elevation or hips below shoulders
+            elevation_score = 20
+            
+        # Check knee separation (knees should be wide apart)
+        left_knee = keypoints[self.KEYPOINT_DICT['left_knee']]
+        right_knee = keypoints[self.KEYPOINT_DICT['right_knee']]
+        
+        if left_knee[2] < self.confidence_threshold or right_knee[2] < self.confidence_threshold:
+            return elevation_score  # Return just elevation score if knees not visible
+            
+        # Calculate knee separation (wider is better for frog pumps)
+        knee_separation = abs(left_knee[1] - right_knee[1])  # x-axis separation
+        
+        if knee_separation > 0.3:  # Wide knee separation
+            separation_score = 90
+        elif knee_separation > 0.2:  # Moderate separation
+            separation_score = 70
+        elif knee_separation > 0.1:  # Some separation
+            separation_score = 50
+        else:  # Knees too close together
+            separation_score = 20
+            
+        # Combine elevation and separation scores
+        return int((elevation_score + separation_score) / 2)
+
+    def plank_stability_score(self, keypoints):
+        """Check plank form: straight line from head to heels.
+        Returns score 0-100, or None if unreliable data."""
+        # Check full body alignment: shoulder-hip-ankle
+        shoulder_hip_ankle_left, ok1 = self.safe_angle_by_names(keypoints, ('left_shoulder', 'left_hip', 'left_ankle'))
+        shoulder_hip_ankle_right, ok2 = self.safe_angle_by_names(keypoints, ('right_shoulder', 'right_hip', 'right_ankle'))
+        
+        if not (ok1 or ok2):
+            return None
+            
+        # Use available side or average
+        if ok1 and ok2:
+            avg_angle = (shoulder_hip_ankle_left + shoulder_hip_ankle_right) / 2
+        elif ok1:
+            avg_angle = shoulder_hip_ankle_left
+        else:
+            avg_angle = shoulder_hip_ankle_right
+            
+        # Good plank should be close to 180° (straight line)
+        deviation = abs(180 - avg_angle)
+        if deviation < 5:
+            return 95  # Excellent plank form
+        elif deviation < 10:
+            return 85  # Good plank form
+        elif deviation < 20:
+            return 65  # Moderate plank form
+        elif deviation < 30:
+            return 40  # Poor plank form
+        else:
+            return 15  # Very poor plank form
+
+    def lunge_stability_score(self, keypoints):
+        """Check lunge form: front knee tracking, back leg position.
+        Returns score 0-100, or None if unreliable data."""
+        # For lunge, check front leg knee angle and back leg extension
+        front_knee_score = self.knee_angle_score(keypoints, 'left', target_angle=90)
+        back_leg_score = self.leg_alignment_score(keypoints)
+        spine_score = self.spine_straight_score(keypoints)
+        
+        valid_scores = [s for s in [front_knee_score, back_leg_score, spine_score] if s is not None]
+        
+        if len(valid_scores) < 2:
+            return None
+            
+        return int(sum(valid_scores) / len(valid_scores))
+
+    def glute_bridge_form_score(self, keypoints):
+        """Comprehensive glute bridge form validation: hip elevation, spine alignment, knee position.
+        Returns score 0-100, or None if unreliable data."""
+        spine_score = self.spine_straight_score(keypoints)
+        pelvis_score = self.pelvis_tuck_score(keypoints)
+        knee_score = self.knee_angle_score(keypoints, 'left', target_angle=90)
+        alignment_score = self.leg_alignment_score(keypoints)
+        
+        valid_scores = [s for s in [spine_score, pelvis_score, knee_score, alignment_score] if s is not None]
+        
+        if len(valid_scores) < 2:
+            return None
+            
+        return int(sum(valid_scores) / len(valid_scores))
+
+    def get_exercise_definition(self, exercise_name):
+        """Get the full exercise definition from exercises list"""
+        return self.exercises.get(exercise_name)
+    
+    def start_hold_phase(self, exercise_type, current_time):
+        """Start a hold phase after rep completion"""
+        self.hold_phase_active = True
+        self.hold_phase_start_time = current_time
+        self.hold_phase_exercise = exercise_type
+        self.rep_pending_hold = False
+        # Reset hold tracking for this phase
+        self.position_hold_start = 0
+        self.current_hold_duration = 0
+        self.hold_requirements_met = False
+        self.target_position_stable = False
+        self.position_stability_buffer = []
+        
+    def process_hold_phase(self, current_angle, keypoints, current_time):
+        """Process the hold phase separately from rep counting"""
+        if not self.hold_phase_active:
+            return False, 0, False
+            
+        # Check hold requirements for the current exercise
+        hold_met, hold_duration, position_stable = self.check_hold_requirements(
+            self.hold_phase_exercise, current_angle, keypoints, current_time)
+        
+        if hold_met:
+            # Hold completed! Exit hold phase
+            self.hold_phase_active = False
+            self.hold_phase_start_time = None
+            self.hold_phase_exercise = None
+            self.reset_hold_tracking()
+            self.speak(f"Hold completed! Held for {hold_duration:.1f} seconds")
+            return True, hold_duration, position_stable
+        
+        return False, hold_duration, position_stable
+    
+    def check_hold_requirements(self, exercise_type, current_angle, keypoints, current_time):
+        """Check if hold requirements are met for the current exercise.
+        Returns (hold_met, hold_duration, position_stable)"""
+        
+        exercise = self.exercises.get(exercise_type, {})
+        hold_reqs = exercise.get('hold_requirements', {})
+        
+        # DEFAULT HOLD REQUIREMENTS for exercises without specific ones
+        if not hold_reqs:
+            # Apply universal hold requirements based on exercise type
+            if 'squat' in exercise_type.lower():
+                hold_reqs = {'bottom_hold': 3.0, 'position_check': 'squat_depth', 'angle_requirement': 90, 'stability_required': True}
+            elif 'bridge' in exercise_type.lower() or 'thrust' in exercise_type.lower():
+                hold_reqs = {'top_hold': 3.0, 'position_check': 'spine_straight', 'angle_requirement': 90, 'stability_required': True}
+            elif 'calf' in exercise_type.lower():
+                hold_reqs = {'top_hold': 5.0, 'position_check': 'calf_extension', 'height_requirement': 1.0, 'stability_required': True}
+            elif 'plank' in exercise_type.lower():
+                hold_reqs = {'position_hold': 10.0, 'position_check': 'plank_straight', 'angle_requirement': 180, 'stability_required': True}
+            elif 'curl' in exercise_type.lower():
+                hold_reqs = {'top_hold': 1.0, 'position_check': 'bicep_peak', 'angle_requirement': 50, 'stability_required': False}
+            elif 'press' in exercise_type.lower():
+                hold_reqs = {'top_hold': 2.0, 'position_check': 'overhead_extension', 'angle_requirement': 175, 'stability_required': True}
+            elif 'deadlift' in exercise_type.lower():
+                hold_reqs = {'bottom_hold': 2.0, 'position_check': 'hip_hinge', 'angle_requirement': 110, 'stability_required': True}
+            elif 'lunge' in exercise_type.lower():
+                hold_reqs = {'bottom_hold': 2.0, 'position_check': 'lunge_depth', 'angle_requirement': 90, 'stability_required': True}
+            elif 'push' in exercise_type.lower():
+                hold_reqs = {'bottom_hold': 1.5, 'position_check': 'push_depth', 'angle_requirement': 90, 'stability_required': True}
+            else:
+                # Default for any other exercise
+                hold_reqs = {'hold_time': 2.0, 'position_check': 'angle', 'angle_requirement': 90, 'stability_required': True}
+        
+        # Get hold requirements
+        required_hold_time = hold_reqs.get('top_hold', hold_reqs.get('bottom_hold', hold_reqs.get('position_hold', hold_reqs.get('hold_time', 2.0))))
+        position_check = hold_reqs.get('position_check', 'angle')
+        angle_requirement = hold_reqs.get('angle_requirement', 90)
+        stability_required = hold_reqs.get('stability_required', True)
+        
+        # Check if we're in the target position
+        in_target_position = False
+        
+        if position_check == 'spine_straight':
+            # For glute bridges - check spine alignment and hip elevation
+            spine_score = self.spine_straight_score(keypoints)
+            if spine_score and spine_score >= 70:  # Good spine alignment
+                # Check if hips are elevated (angle near target)
+                angle_diff = abs(current_angle - angle_requirement)
+                in_target_position = angle_diff <= self.hold_angle_tolerance
+        
+        elif position_check == 'squat_depth':
+            # For squats - check if at proper depth
+            knee_score = self.knee_angle_score(keypoints, 'left', target_angle=angle_requirement)
+            if knee_score and knee_score >= 60:  # Good knee position
+                # Check squat depth
+                angle_diff = abs(current_angle - angle_requirement)
+                in_target_position = angle_diff <= self.hold_angle_tolerance
+        
+        elif position_check == 'calf_extension':
+            # For calf raises - check ankle height for tippy toe position
+            # Determine which side to track
+            if hasattr(self, 'current_tracking_side') and self.current_tracking_side:
+                side = self.current_tracking_side
+            else:
+                side = 'left'  # Default to left
+            
+            calf_metric = self.calculate_calf_raise_metric(keypoints, side)
+            if calf_metric is not None:
+                # For tippy toes, metric should be above threshold (positive value)
+                height_good = calf_metric >= 1.0  # Good tippy toe elevation
+                
+                # Additional stability check - make sure height is stable
+                if hasattr(self, 'prev_calf_metric'):
+                    height_stability = abs(calf_metric - self.prev_calf_metric) < 0.3  # Stability tolerance
+                else:
+                    height_stability = True
+                
+                self.prev_calf_metric = calf_metric
+                in_target_position = height_good and height_stability
+            else:
+                in_target_position = False
+                
+        elif position_check == 'plank_straight':
+            # For planks - check straight line alignment
+            plank_score = self.plank_stability_score(keypoints)
+            if plank_score and plank_score >= 70:  # Good plank alignment
+                angle_diff = abs(current_angle - angle_requirement)
+                in_target_position = angle_diff <= self.hold_angle_tolerance
+            else:
+                in_target_position = False
+                
+        elif position_check == 'bicep_peak':
+            # For bicep curls - check peak contraction (reasonably forgiving)
+            shoulder_score = self.shoulder_stability_score(keypoints)
+            
+            # Make requirements reasonably forgiving
+            if shoulder_score is None or shoulder_score >= 40:  # Reasonable shoulder requirement
+                # Check if at peak contraction angle
+                angle_diff = abs(current_angle - angle_requirement)
+                
+                # Use reasonable tolerance for bicep curls
+                bicep_tolerance = 30  # Reasonable tolerance
+                in_target_position = angle_diff <= bicep_tolerance
+            else:
+                in_target_position = False
+                
+        elif position_check == 'overhead_extension':
+            # For overhead press - check full extension
+            overhead_score = self.overhead_position_score(keypoints)
+            if overhead_score and overhead_score >= 70:  # Good overhead position
+                angle_diff = abs(current_angle - angle_requirement)
+                in_target_position = angle_diff <= self.hold_angle_tolerance
+            else:
+                in_target_position = False
+                
+        elif position_check == 'hip_hinge':
+            # For deadlifts - check proper hip hinge
+            spine_score = self.spine_straight_score(keypoints)
+            knee_score = self.knee_angle_score(keypoints, 'left', target_angle=170)  # Slight knee bend
+            if spine_score and spine_score >= 60 and knee_score and knee_score >= 60:
+                angle_diff = abs(current_angle - angle_requirement)
+                in_target_position = angle_diff <= self.hold_angle_tolerance
+            else:
+                in_target_position = False
+                
+        elif position_check == 'lunge_depth':
+            # For lunges - check proper depth
+            knee_score = self.knee_angle_score(keypoints, 'left', target_angle=90)
+            if knee_score and knee_score >= 60:  # Good knee position
+                angle_diff = abs(current_angle - angle_requirement)
+                in_target_position = angle_diff <= self.hold_angle_tolerance
+            else:
+                in_target_position = False
+                
+        elif position_check == 'push_depth':
+            # For push-ups - check bottom position depth
+            plank_score = self.plank_stability_score(keypoints)
+            if plank_score and plank_score >= 60:  # Good plank form
+                angle_diff = abs(current_angle - angle_requirement)
+                in_target_position = angle_diff <= self.hold_angle_tolerance
+            else:
+                in_target_position = False
+        
+        else:
+            # Default angle check
+            angle_diff = abs(current_angle - angle_requirement)
+            in_target_position = angle_diff <= self.hold_angle_tolerance
+        
+        # Track position stability if required
+        if stability_required:
+            self.position_stability_buffer.append(current_angle)
+            if len(self.position_stability_buffer) > 10:  # Keep last 10 readings
+                self.position_stability_buffer.pop(0)
+            
+            # Check if position is stable (low variance)
+            if len(self.position_stability_buffer) >= 5:
+                variance = np.var(self.position_stability_buffer)
+                position_stable = variance < 300  # More forgiving variance threshold for vision jitter
+            else:
+                position_stable = False
+        else:
+            position_stable = True
+        
+        # Update hold tracking
+        if in_target_position and position_stable:
+            if not self.target_position_stable:
+                # Just entered stable target position
+                self.position_hold_start = current_time
+                self.target_position_stable = True
+                self.current_hold_duration = 0
+            else:
+                # Continue holding
+                self.current_hold_duration = current_time - self.position_hold_start
+        else:
+            # Not in target position or not stable - reset hold
+            self.target_position_stable = False
+            self.current_hold_duration = 0
+            self.position_hold_start = 0
+        
+        # Check if hold requirement is met
+        hold_met = self.current_hold_duration >= required_hold_time
+        
+        return hold_met, self.current_hold_duration, position_stable
+
+    def reset_hold_tracking(self):
+        """Reset hold tracking variables when starting new rep"""
+        self.position_hold_start = 0
+        self.current_hold_duration = 0
+        self.hold_requirements_met = False
+        self.target_position_stable = False
+        self.position_stability_buffer = []
+                
+
+       
     
     def validate_progressive_movement(self, current_angle, exercise_type):
         """
         Progressive movement validation for strict form checking
-        Ensures movement follows proper sequence: 180° → 150° → 90° → 60° → 90° → 150° → 180°
+        Ensures movement follows proper sequence based on exercise type
         """
         if not self.strict_form_enabled:
             return True, "Progressive validation disabled"
         
         current_time = time.time()
         
-        # Exercise-specific thresholds
+        # Exercise-specific thresholds and patterns
         if exercise_type == 'bicep_curls':
-            self.progression_thresholds = [170, 140, 90, 50]  # Stricter for bicep curls
+            self.progression_thresholds = [170, 140, 90, 50]  # Extended to contracted
+            self.progression_direction_pattern = 'contract_extend'  # Contract then extend
         elif exercise_type == 'shoulder_press':
-            self.progression_thresholds = [175, 140, 100, 80]  # Overhead press progression
+            self.progression_thresholds = [80, 100, 140, 175]  # Shoulder level to overhead
+            self.progression_direction_pattern = 'extend_contract'  # Extend then contract
+        elif exercise_type in ['squat', 'goblet_squat', 'sumo_squat']:
+            self.progression_thresholds = [170, 140, 110, 90]  # Standing to deep squat
+            self.progression_direction_pattern = 'descend_ascend'  # Down then up
+        elif exercise_type in ['glute_bridge', 'hip_thrust']:
+            self.progression_thresholds = [140, 155, 165, 175]  # Lying to bridge
+            self.progression_direction_pattern = 'lift_lower'  # Lift then lower
+        elif exercise_type in ['fire_hydrant', 'quadruped_hip_abduction']:
+            self.progression_thresholds = [160, 140, 120, 100]  # Leg close to abducted
+            self.progression_direction_pattern = 'abduct_adduct'  # Out then in
+        elif exercise_type in ['romanian_deadlift', 'rdl']:
+            self.progression_thresholds = [170, 150, 130, 110]  # Standing to hip hinge
+            self.progression_direction_pattern = 'hinge_return'  # Hinge then return
+        elif exercise_type in ['push_up', 'pushup']:
+            self.progression_thresholds = [170, 140, 110, 90]  # Extended to lowered
+            self.progression_direction_pattern = 'lower_push'  # Lower then push
+        elif exercise_type in ['lunge', 'reverse_lunge', 'forward_lunge']:
+            self.progression_thresholds = [170, 140, 110, 90]  # Standing to lunge
+            self.progression_direction_pattern = 'descend_ascend'  # Down then up
         else:
             self.progression_thresholds = [180, 150, 90, 60]  # Default progression
+            self.progression_direction_pattern = 'contract_extend'  # Default pattern
         
         # Initialize progression tracking
         if self.current_progression == 0 and self.progression_direction == 'down':
             self.progression_start_time = current_time
             self.progressive_states = []
         
-        # Track progression based on direction
+        # Track progression based on direction and exercise pattern
         if self.progression_direction == 'down':
-            # Moving from extended to contracted position
+            # Moving through the first half of the movement
             target_angle = self.progression_thresholds[self.current_progression]
             
-            if current_angle <= target_angle:
+            # Determine if we're moving in the right direction based on exercise pattern
+            if self.progression_direction_pattern in ['contract_extend', 'descend_ascend', 'hinge_return', 'lower_push']:
+                movement_condition = current_angle <= target_angle
+            else:  # extend_contract, lift_lower, abduct_adduct
+                movement_condition = current_angle >= target_angle
+            
+            if movement_condition:
                 self.progressive_states.append({
                     'stage': self.current_progression,
                     'angle': current_angle,
@@ -1275,10 +2029,16 @@ class MoveNetWorkoutTracker:
                     self.current_progression = len(self.progression_thresholds) - 2  # Start going back up
                     
         elif self.progression_direction == 'up':
-            # Moving from contracted to extended position
+            # Moving through the second half of the movement (return phase)
             target_angle = self.progression_thresholds[self.current_progression]
             
-            if current_angle >= target_angle:
+            # Determine return movement condition
+            if self.progression_direction_pattern in ['contract_extend', 'descend_ascend', 'hinge_return', 'lower_push']:
+                movement_condition = current_angle >= target_angle
+            else:  # extend_contract, lift_lower, abduct_adduct
+                movement_condition = current_angle <= target_angle
+            
+            if movement_condition:
                 self.progressive_states.append({
                     'stage': self.current_progression,
                     'angle': current_angle,
@@ -1295,7 +2055,7 @@ class MoveNetWorkoutTracker:
                     return True, f"Valid rep completed in {total_time:.1f}s"
         
         # Check for progression timeout (too slow)
-        if current_time - self.progression_start_time > 10.0:  # 10 second timeout
+        if current_time - self.progression_start_time > 15.0:  # 15 second timeout for complex exercises
             self.reset_progression()
             return False, "Movement too slow - progression timeout"
         
@@ -1305,7 +2065,7 @@ class MoveNetWorkoutTracker:
             stage_gap = abs(last_two[1]['stage'] - last_two[0]['stage'])
             time_gap = last_two[1]['time'] - last_two[0]['time']
             
-            if stage_gap > 1 and time_gap < 0.3:  # Skipped stage too quickly
+            if stage_gap > 1 and time_gap < 0.4:  # Skipped stage too quickly
                 self.reset_progression()
                 return False, "Movement too jerky - skipped progression stage"
         
@@ -1317,12 +2077,52 @@ class MoveNetWorkoutTracker:
         self.progression_direction = 'down'
         self.progressive_states = []
         self.progression_start_time = 0
+
+    def calculate_calf_raise_metric(self, keypoints, side='left'):
+        """Calculate calf raise metric using ankle height relative to knee"""
+        try:
+            if side == 'left':
+                knee = keypoints[self.KEYPOINT_DICT['left_knee']]
+                ankle = keypoints[self.KEYPOINT_DICT['left_ankle']]
+            else:
+                knee = keypoints[self.KEYPOINT_DICT['right_knee']]
+                ankle = keypoints[self.KEYPOINT_DICT['right_ankle']]
+            
+            # Check confidence
+            if (knee[2] < self.confidence_threshold or 
+                ankle[2] < self.confidence_threshold):
+                return None
+            
+            # Calculate vertical distance between knee and ankle
+            # In image coordinates: smaller y = higher position
+            # When on tippy toes, ankle y should be SMALLER (higher up)
+            vertical_distance = knee[1] - ankle[1]  # Positive when ankle is above knee
+            
+            # Scale up for proper direction (positive values for tippy toes)
+            calf_metric = vertical_distance * 100  # Positive values, tippy toes = positive
+            
+            # Add smoothing to reduce fluctuations
+            if not hasattr(self, 'calf_metric_history'):
+                self.calf_metric_history = []
+            
+            self.calf_metric_history.append(calf_metric)
+            if len(self.calf_metric_history) > 5:  # Keep last 5 readings
+                self.calf_metric_history.pop(0)
+            
+            # Return smoothed average
+            smoothed_metric = sum(self.calf_metric_history) / len(self.calf_metric_history)
+            return smoothed_metric
+            
+        except (IndexError, KeyError, ZeroDivisionError):
+            return None
     
     def track_exercise(self, exercise_type, keypoints):
         """Simple, reliable exercise tracking with bilateral support"""
         if exercise_type not in self.exercises:
             return False, 0, 0
         
+        # Set current exercise for tracking
+        self.current_exercise = exercise_type
         exercise = self.exercises[exercise_type]
         current_time = time.time()
         
@@ -1381,6 +2181,20 @@ class MoveNetWorkoutTracker:
                 # Use knee distance as primary angle, hip height as secondary
                 angle = knee_distance * 2 + avg_hip_height  # Combined metric
                 
+            elif exercise_type == 'calf_raise':
+                # For calf raise: use ankle height relative to knee
+                # Determine which side to track
+                if hasattr(self, 'current_tracking_side') and self.current_tracking_side:
+                    side = self.current_tracking_side
+                else:
+                    side = 'left'  # Default to left
+                
+                calf_metric = self.calculate_calf_raise_metric(keypoints, side)
+                if calf_metric is None:
+                    return False, 0, 0
+                
+                angle = calf_metric  # Use the height metric as our "angle"
+                
             else:
                 # Standard 3-point angle calculation
                 angle = self.calculate_angle(points[0], points[1], points[2])
@@ -1397,22 +2211,57 @@ class MoveNetWorkoutTracker:
             rep_completed = False
             form_score = 0
             
-            # Different logic for different exercises
-            if exercise_type == 'bicep_curls':
-                # PROGRESSIVE TRACKING: Use strict progressive validation for bicep curls
-                progression_result, progression_message = self.validate_progressive_movement(smoothed_angle, exercise_type)
+            # Global progressive validation gate (default ON). We'll compute a primary angle for progression
+            progression_result = None
+            if self.strict_form_enabled:
+                progression_result, _ = self.validate_progressive_movement(smoothed_angle, exercise_type)
+
+            # Different logic for different exercises - COMPREHENSIVE VALIDATION FOR ALL
+            if exercise_type in ['bicep_curls', 'bicep_curl', 'hammer_curl', 'concentration_curl', 'zottman_curl', 'supinated_curl_to_press']:
+                # Enhanced bicep curls with comprehensive form validation (ALL curl variations)
+                core_score = self.core_engagement_score(keypoints)
+                shoulder_score = self.shoulder_stability_score(keypoints)
+                spine_score = self.spine_straight_score(keypoints)
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [core_score, shoulder_score, spine_score] if s is not None]
+                
+                if len(valid_scores) < 2:  # Need at least 2 reliable measurements
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    # Additional penalty for wild movements - if too few valid scores, lower the result
+                    if len(valid_scores) < 3:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability by looking at angle history variance
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 500:  # High variance indicates erratic movement
+                            combined_form_score = int(combined_form_score * 0.3)  # 70% penalty for erratic movement
+                        elif angle_variance > 200:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.6)  # 40% penalty
+                
+                # Ensure minimum score constraints for poor form
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
                 
                 if progression_result is True:
-                    # Full progressive rep completed
+                    # Full progressive rep completed - complete rep immediately (NO HOLD)
                     rep_completed = True
                     self.last_rep_time = current_time
-                    form_score = 95  # High score for completing progressive validation
-                    self.state = 'down'
-                    
+                    form_score = combined_form_score
+                    self.state = 'down'  # Reset to down state
+                    # Reset progression for next rep
+                    self.current_progression = 0
+                    self.progression_direction = 'down'
+                    self.progressive_states = []
+                        
                 elif progression_result is False:
                     # Progressive validation failed - reset state
                     self.state = 'down'
-                    form_score = 30  # Low score for failed progression
+                    form_score = 10  # Very low score for failed progression
+                    self.reset_hold_tracking()  # Reset hold tracking
                     
                 else:
                     # Still progressing - use fallback logic for basic state tracking
@@ -1420,55 +2269,502 @@ class MoveNetWorkoutTracker:
                         if current_time - self.last_rep_time > 0.8:  # Longer minimum time
                             self.state = 'up'
                     elif self.state == 'up' and smoothed_angle > exercise['down_threshold'] + 10:  # Stricter threshold
-                        if current_time - self.last_rep_time > 1.5:  # Must be in this state for 1.5s
-                            # Only count rep if not using progressive tracking or as backup
+                        if current_time - self.last_rep_time > 1.5 and combined_form_score >= 50:
+                            # Complete rep immediately (NO HOLD)
+                            rep_completed = True
+                            self.last_rep_time = current_time
+                            form_score = combined_form_score
+                            self.state = 'down'
+                            # Only count rep if not using progressive tracking or as backup AND hold requirement met
                             if not self.strict_form_enabled:
                                 rep_completed = True
                                 self.last_rep_time = current_time
-                                # Form score based on range achieved
-                                range_achieved = smoothed_angle - exercise['up_threshold']
-                                form_score = min(100, max(60, int(70 + range_achieved/3)))
+                                form_score = combined_form_score
+                                self.reset_hold_tracking()  # Reset for next rep
                             self.state = 'down'
                         
             elif exercise_type == 'shoulder_press':
+                # Enhanced shoulder press with comprehensive form validation
+                shoulder_score = self.shoulder_stability_score(keypoints)
+                overhead_score = self.overhead_position_score(keypoints)
+                core_score = self.core_engagement_score(keypoints)
+                spine_score = self.spine_straight_score(keypoints)
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [shoulder_score, overhead_score, core_score, spine_score] if s is not None]
+                
+                if len(valid_scores) < 2:  # Need at least 2 reliable measurements
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    # Additional penalty for wild movements
+                    if len(valid_scores) < 3:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 500:  # High variance indicates erratic movement
+                            combined_form_score = int(combined_form_score * 0.3)  # 70% penalty
+                        elif angle_variance > 200:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.6)  # 40% penalty
+                
+                # Ensure minimum score constraints
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
+                
                 # STRICT: Shoulder press requires full overhead extension and controlled movement
                 if self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 5:  # Must reach almost full extension
                     if current_time - self.last_rep_time > 1.0:  # Longer pause for overhead position
                         self.state = 'up'
                 elif self.state == 'up' and smoothed_angle < exercise['down_threshold'] + 10:  # Return to shoulder level
-                    if current_time - self.last_rep_time > 1.5:  # Controlled lowering movement
+                    if current_time - self.last_rep_time > 1.5 and combined_form_score >= 40:  # Stricter form requirement
                         rep_completed = True
                         self.last_rep_time = current_time
-                        # Strict form scoring - heavily penalize incomplete overhead extension
-                        overhead_achieved = smoothed_angle >= (exercise['up_threshold'] - 5)
-                        if overhead_achieved:
-                            form_score = min(100, max(75, int(smoothed_angle * 0.55)))
-                        else:
-                            form_score = max(30, int(smoothed_angle * 0.4))  # Low score for poor form
+                        form_score = combined_form_score
                         self.state = 'down'
+                        
             elif exercise_type == 'romanian_deadlift':
+                # Enhanced Romanian deadlift with FULL-BODY comprehensive form validation (arms, hips, legs, spine)
+                deadlift_score = self.deadlift_form_score(keypoints)  # New comprehensive method
+                knee_score = self.knee_angle_score(keypoints, None, target_angle=170)  # Slight knee bend
+                alignment_score = self.leg_alignment_score(keypoints)
+                spine_score = self.spine_straight_score(keypoints)
+                core_score = self.core_engagement_score(keypoints)
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [deadlift_score, knee_score, alignment_score, spine_score, core_score] if s is not None]
+                
+                if len(valid_scores) < 3:  # Need at least 3 reliable measurements for deadlift
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    # Additional penalty for wild movements
+                    if len(valid_scores) < 4:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 500:  # High variance indicates erratic movement
+                            combined_form_score = int(combined_form_score * 0.3)  # 70% penalty
+                        elif angle_variance > 200:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.6)  # 40% penalty
+                
+                # Ensure minimum score constraints
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
+                
                 # Romanian deadlift: up = standing (large angle), down = hip hinge (small angle)
                 # Focus on controlled movement and proper range
                 if self.state == 'up' and smoothed_angle < exercise['down_threshold'] + 20:
                     self.state = 'down'
                 elif self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 20:
-                    if current_time - self.last_rep_time > 2.0:  # Slower movement, longer time
+                    if current_time - self.last_rep_time > 2.0 and combined_form_score >= 50:  # Slower movement, stricter form
                         rep_completed = True
                         self.last_rep_time = current_time
-                        # Form score emphasizes range of motion and control
-                        range_score = min(100, max(50, int((smoothed_angle - exercise['down_threshold']) * 2)))
-                        form_score = min(100, max(60, range_score))
+                        form_score = combined_form_score
                     self.state = 'up'
+                    
+            elif exercise_type == 'frog_pump':
+                # Enhanced frog pump with PELVIC ANGLE and knee separation tracking
+                frog_pump_score = self.frog_pump_pelvic_score(keypoints)  # New pelvic angle method
+                spine_score = self.spine_straight_score(keypoints)
+                pelvis_score = self.pelvis_tuck_score(keypoints)
+                core_score = self.core_engagement_score(keypoints)
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [frog_pump_score, spine_score, pelvis_score, core_score] if s is not None]
+                
+                if len(valid_scores) < 2:  # Need at least 2 reliable measurements
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    # Additional penalty for wild movements
+                    if len(valid_scores) < 3:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 500:  # High variance indicates erratic movement
+                            combined_form_score = int(combined_form_score * 0.3)  # 70% penalty
+                        elif angle_variance > 200:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.6)  # 40% penalty
+                
+                # Ensure minimum score constraints
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
+
+                if progression_result is True:
+                    rep_completed = True
+                    self.last_rep_time = current_time
+                    form_score = combined_form_score
+                    self.state = 'down'
+                elif progression_result is False:
+                    self.state = 'down'
+                    form_score = 10
+                else:
+                    # Frog pump: down = hips down, up = hips up with knees wide
+                    if self.state == 'down' and smoothed_angle > 130:  # Hips up, knees wide
+                        if current_time - self.last_rep_time > 0.8:
+                            self.state = 'up'
+                    elif self.state == 'up' and smoothed_angle < 90:  # Hips down, knees closer
+                        if current_time - self.last_rep_time > 1.5 and combined_form_score >= 40:
+                            rep_completed = True
+                            self.last_rep_time = current_time
+                            form_score = combined_form_score
+                            self.state = 'down'
+                            
+            elif exercise_type in ['glute_bridge', 'hip_thrust', 'single_leg_glute_bridge']:
+                # Enhanced glute bridges with comprehensive form validation
+                glute_bridge_score = self.glute_bridge_form_score(keypoints)  # New comprehensive method
+                spine_score = self.spine_straight_score(keypoints)
+                pelvis_score = self.pelvis_tuck_score(keypoints)
+                knee_score = self.knee_angle_score(keypoints, None, target_angle=90)
+                alignment_score = self.leg_alignment_score(keypoints)
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [glute_bridge_score, spine_score, pelvis_score, knee_score, alignment_score] if s is not None]
+                
+                if len(valid_scores) < 2:  # Need at least 2 reliable measurements
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    # Additional penalty for wild movements
+                    if len(valid_scores) < 3:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 500:  # High variance indicates erratic movement
+                            combined_form_score = int(combined_form_score * 0.3)  # 70% penalty
+                        elif angle_variance > 200:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.6)  # 40% penalty
+                
+                # Ensure minimum score constraints
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
+
+                if progression_result is True:
+                    # Check hold requirements for glute bridge
+                    hold_met, hold_duration, position_stable = self.check_hold_requirements(
+                        self.current_exercise, smoothed_angle, keypoints, current_time)
+                    
+                    if hold_met:
+                        rep_completed = True
+                        self.last_rep_time = current_time
+                        form_score = combined_form_score
+                        self.state = 'down'  # Reset to down state
+                        self.reset_hold_tracking()
+                        # Force state transition by resetting progression
+                        self.current_progression = 0
+                        self.progression_direction = 'down'
+                        self.progressive_states = []
+                        self.speak(f"Glute bridge held for {hold_duration:.1f} seconds! Rep completed")
+                    else:
+                        # Still need to hold position longer
+                        form_score = max(25, combined_form_score)  # Penalize for incomplete hold
+                        
+                elif progression_result is False:
+                    self.state = 'down'
+                    form_score = 10
+                    self.reset_hold_tracking()
+                else:
+                    # Check hold requirements during movement
+                    hold_met, hold_duration, position_stable = self.check_hold_requirements(
+                        self.current_exercise, smoothed_angle, keypoints, current_time)
+                    
+                    # Basic angle thresholds with form validation AND HOLD REQUIREMENTS
+                    if self.state == 'down' and smoothed_angle > 160:
+                        if current_time - self.last_rep_time > 0.8:
+                            self.state = 'up'
+                    elif self.state == 'up' and smoothed_angle < 120:
+                        if current_time - self.last_rep_time > 1.5 and combined_form_score >= 40 and hold_met:  # HOLD REQUIREMENT ADDED
+                            rep_completed = True
+                            self.last_rep_time = current_time
+                            form_score = combined_form_score
+                            self.state = 'down'
+                            self.reset_hold_tracking()
+
+            elif exercise_type in ['squat', 'goblet_squat', 'sumo_squat', 'bulgarian_split_squat']:
+                # Enhanced squat with comprehensive whole-body form validation
+                squat_form_score = self.squat_depth_and_form_score(keypoints)  # Includes knee tracking
+                knee_score = self.knee_angle_score(keypoints, None, target_angle=90)
+                spine_score = self.spine_straight_score(keypoints)
+                core_score = self.core_engagement_score(keypoints)
+                
+                # Check both sides for knee tracking (safety critical)
+                left_knee_tracking = self.squat_knee_tracking_score(keypoints, 'left')
+                right_knee_tracking = self.squat_knee_tracking_score(keypoints, 'right')
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [squat_form_score, knee_score, spine_score, core_score] if s is not None]
+                knee_tracking_scores = [s for s in [left_knee_tracking, right_knee_tracking] if s is not None]
+                
+                if len(valid_scores) < 2:  # Need at least 2 reliable measurements
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    
+                    # CRITICAL: Heavily penalize if knees go over toes (safety issue)
+                    if knee_tracking_scores:
+                        worst_knee_tracking = min(knee_tracking_scores)
+                        if worst_knee_tracking < 20:  # Poor knee tracking
+                            combined_form_score = int(combined_form_score * 0.2)  # 80% penalty for knee over toes
+                        elif worst_knee_tracking < 40:  # Moderate knee issues
+                            combined_form_score = int(combined_form_score * 0.5)  # 50% penalty
+                    
+                    # Additional penalty for wild movements
+                    if len(valid_scores) < 3:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 500:  # High variance indicates erratic movement
+                            combined_form_score = int(combined_form_score * 0.3)  # 70% penalty
+                        elif angle_variance > 200:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.6)  # 40% penalty
+                
+                # Ensure minimum score constraints
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
+                
+                if progression_result is True:
+                    # Check hold requirements for squats - must hold at bottom
+                    hold_met, hold_duration, position_stable = self.check_hold_requirements(
+                        self.current_exercise, smoothed_angle, keypoints, current_time)
+                    
+                    if hold_met:
+                        rep_completed = True
+                        self.last_rep_time = current_time
+                        form_score = combined_form_score
+                        self.state = 'down'  # Reset to down state
+                        self.reset_hold_tracking()
+                        # Force state transition by resetting progression
+                        self.current_progression = 0
+                        self.progression_direction = 'down'
+                        self.progressive_states = []
+                        self.speak(f"Squat depth held for {hold_duration:.1f} seconds! Rep completed")
+                    else:
+                        # Still need to hold bottom position longer
+                        form_score = max(30, combined_form_score)  # Penalize for incomplete hold
+                        
+                elif progression_result is False:
+                    self.state = 'down'
+                    form_score = 10
+                    self.reset_hold_tracking()
+                else:
+                    # Check hold requirements during movement
+                    hold_met, hold_duration, position_stable = self.check_hold_requirements(
+                        self.current_exercise, smoothed_angle, keypoints, current_time)
+                    
+                    # Standard squat logic with strict form validation AND HOLD REQUIREMENTS
+                    if self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 15:
+                        self.state = 'up'
+                    elif self.state == 'up' and smoothed_angle < exercise['down_threshold'] + 15:
+                        if current_time - self.last_rep_time > self.min_rep_time and combined_form_score >= 50 and hold_met:  # HOLD REQUIREMENT ADDED
+                            rep_completed = True
+                            self.last_rep_time = current_time
+                            form_score = combined_form_score
+                            self.reset_hold_tracking()
+                        self.state = 'down'
+
+            elif exercise_type in ['push_up', 'push_ups']:
+                # Enhanced push-up with comprehensive form validation
+                core_score = self.core_engagement_score(keypoints)
+                shoulder_score = self.shoulder_stability_score(keypoints)
+                alignment_score = self.leg_alignment_score(keypoints)
+                spine_score = self.spine_straight_score(keypoints)
+                plank_score = self.plank_stability_score(keypoints)  # New plank form method
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [core_score, shoulder_score, alignment_score, spine_score, plank_score] if s is not None]
+                
+                if len(valid_scores) < 2:  # Need at least 2 reliable measurements
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    # Additional penalty for wild movements
+                    if len(valid_scores) < 3:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 500:  # High variance indicates erratic movement
+                            combined_form_score = int(combined_form_score * 0.3)  # 70% penalty
+                        elif angle_variance > 200:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.6)  # 40% penalty
+                
+                # Ensure minimum score constraints
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
+                
+                if progression_result is True:
+                    rep_completed = True
+                    self.last_rep_time = current_time
+                    form_score = combined_form_score
+                    self.state = 'down'
+                elif progression_result is False:
+                    self.state = 'down'
+                    form_score = 10
+                else:
+                    # Standard push-up logic with form validation
+                    if self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 15:
+                        self.state = 'up'
+                    elif self.state == 'up' and smoothed_angle < exercise['down_threshold'] + 15:
+                        if current_time - self.last_rep_time > self.min_rep_time and combined_form_score >= 40:
+                            rep_completed = True
+                            self.last_rep_time = current_time
+                            form_score = combined_form_score
+                        self.state = 'down'
+
+            elif exercise_type in ['lunge', 'dumbbell_lunge', 'reverse_lunge', 'forward_lunge']:
+                # Enhanced lunge with comprehensive form validation
+                lunge_score = self.lunge_stability_score(keypoints)  # New lunge method
+                knee_score = self.knee_angle_score(keypoints, None, target_angle=90)
+                alignment_score = self.leg_alignment_score(keypoints)
+                spine_score = self.spine_straight_score(keypoints)
+                core_score = self.core_engagement_score(keypoints)
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [lunge_score, knee_score, alignment_score, spine_score, core_score] if s is not None]
+                
+                if len(valid_scores) < 2:  # Need at least 2 reliable measurements
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    # Additional penalty for wild movements
+                    if len(valid_scores) < 3:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 500:  # High variance indicates erratic movement
+                            combined_form_score = int(combined_form_score * 0.3)  # 70% penalty
+                        elif angle_variance > 200:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.6)  # 40% penalty
+                
+                # Ensure minimum score constraints
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
+                
+                if progression_result is True:
+                    rep_completed = True
+                    self.last_rep_time = current_time
+                    form_score = combined_form_score
+                    self.state = 'down'
+                elif progression_result is False:
+                    self.state = 'down'
+                    form_score = 10
+                else:
+                    # Standard lunge logic with form validation
+                    if self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 15:
+                        self.state = 'up'
+                    elif self.state == 'up' and smoothed_angle < exercise['down_threshold'] + 15:
+                        if current_time - self.last_rep_time > self.min_rep_time and combined_form_score >= 40:
+                            rep_completed = True
+                            self.last_rep_time = current_time
+                            form_score = combined_form_score
+                        self.state = 'down'
+
+            elif exercise_type in ['plank', 'side_plank']:
+                # Enhanced plank with comprehensive stability validation
+                plank_score = self.plank_stability_score(keypoints)  # New plank method
+                core_score = self.core_engagement_score(keypoints)
+                shoulder_score = self.shoulder_stability_score(keypoints)
+                spine_score = self.spine_straight_score(keypoints)
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [plank_score, core_score, shoulder_score, spine_score] if s is not None]
+                
+                if len(valid_scores) < 2:  # Need at least 2 reliable measurements
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    # Additional penalty for wild movements
+                    if len(valid_scores) < 3:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability (critical for planks)
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 300:  # Lower threshold for planks (should be stable)
+                            combined_form_score = int(combined_form_score * 0.2)  # 80% penalty for instability
+                        elif angle_variance > 100:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.5)  # 50% penalty
+                
+                # Ensure minimum score constraints
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
+                
+                # For planks, track time holding position rather than reps
+                if self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 10:
+                    self.state = 'up'
+                elif self.state == 'up' and smoothed_angle < exercise['down_threshold'] + 10:
+                    if current_time - self.last_rep_time > 2.0 and combined_form_score >= 60:  # Hold for 2+ seconds with good form
+                        rep_completed = True
+                        self.last_rep_time = current_time
+                        form_score = combined_form_score
+                    self.state = 'down'
+
             else:
-                # For other exercises: down = small angle, up = large angle
-                if self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 15:
+                # Enhanced form validation for ALL other exercises - NO MORE BASIC FALLBACKS
+                spine_score = self.spine_straight_score(keypoints)
+                core_score = self.core_engagement_score(keypoints)
+                shoulder_score = self.shoulder_stability_score(keypoints)
+                alignment_score = self.leg_alignment_score(keypoints)
+                
+                # Only use valid (non-None) scores and be extremely strict
+                valid_scores = [s for s in [spine_score, core_score, shoulder_score, alignment_score] if s is not None]
+                
+                if len(valid_scores) < 2:  # Need at least 2 reliable measurements
+                    combined_form_score = 5  # Very poor form if can't track properly
+                else:
+                    combined_form_score = int(sum(valid_scores) / len(valid_scores))
+                    # Additional penalty for wild movements
+                    if len(valid_scores) < 3:
+                        combined_form_score = int(combined_form_score * 0.5)  # 50% penalty for missing data
+                    
+                    # Check for movement stability
+                    if len(self.angle_history) >= 3:
+                        angle_variance = np.var(self.angle_history)
+                        if angle_variance > 500:  # High variance indicates erratic movement
+                            combined_form_score = int(combined_form_score * 0.3)  # 70% penalty
+                        elif angle_variance > 200:  # Moderate variance
+                            combined_form_score = int(combined_form_score * 0.6)  # 40% penalty
+                
+                # Ensure minimum score constraints
+                if combined_form_score < 10:
+                    combined_form_score = max(5, combined_form_score)
+                
+                # For all other exercises: down = small angle, up = large angle with STRICT form requirements
+                
+                if progression_result is True:
+                    # Progressive rep completed - complete immediately (NO HOLD)
+                    rep_completed = True
+                    self.last_rep_time = current_time
+                    form_score = combined_form_score
+                    self.state = 'down'
+                    self.current_progression = 0
+                    self.progression_direction = 'down'
+                    self.progressive_states = []
+                elif progression_result is False:
+                    self.state = 'down'
+                    form_score = 10
+                    self.reset_hold_tracking()
+                elif self.state == 'down' and smoothed_angle > exercise['up_threshold'] - 15:
                     self.state = 'up'
                 elif self.state == 'up' and smoothed_angle < exercise['down_threshold'] + 15:
-                    if current_time - self.last_rep_time > self.min_rep_time:
+                    if current_time - self.last_rep_time > self.min_rep_time and combined_form_score >= 50 and hold_met:  # HOLD REQUIREMENT FOR ALL
                         rep_completed = True
                         self.last_rep_time = current_time
-                        # Form score based on range achieved
-                        form_score = min(100, max(60, int(100 - abs(smoothed_angle - exercise['down_threshold']))))
+                        form_score = combined_form_score
+                        self.reset_hold_tracking()
                     self.state = 'down'
             
             if rep_completed:
@@ -1817,27 +3113,62 @@ class MoveNetWorkoutTracker:
         cv2.putText(frame, f"{current_angle:.1f}", 
                    (text_x, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
         
+        # Target hold angle/position
+        if hasattr(self, 'current_exercise') and self.current_exercise:
+            exercise_def = self.exercises.get(self.current_exercise, {})
+            hold_reqs = exercise_def.get('hold_requirements', {})
+            target_angle = hold_reqs.get('angle_requirement', hold_reqs.get('height_requirement', None))
+            if target_angle:
+                cv2.putText(frame, f"Hold Target:", 
+                           (text_x, 250), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                cv2.putText(frame, f"{target_angle:.0f}", 
+                           (text_x, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        
         # Movement state
         cv2.putText(frame, f"State:", 
-                   (text_x, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                   (text_x, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.putText(frame, f"{self.state}", 
-                   (text_x, 310), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
+                   (text_x, 330), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 165, 0), 2)
         
         # Form score
         if hasattr(self, 'last_form_score') and self.last_form_score is not None:
             cv2.putText(frame, f"Form Score:", 
-                       (text_x, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                       (text_x, 380), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             color = (0, 255, 0) if self.last_form_score >= 80 else (0, 255, 255) if self.last_form_score >= 60 else (0, 0, 255)
             cv2.putText(frame, f"{self.last_form_score}%", 
                        (text_x, 390), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
         
+        # Hold duration and requirements
+        if hasattr(self, 'current_hold_duration'):
+            cv2.putText(frame, f"Hold Duration:", 
+                       (text_x, 460), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Get required hold time for current exercise
+            exercise_def = self.exercises.get(self.current_exercise, {})
+            hold_reqs = exercise_def.get('hold_requirements', {})
+            required_time = hold_reqs.get('top_hold', hold_reqs.get('bottom_hold', hold_reqs.get('position_hold', 2.0)))
+            
+            # Color code based on progress
+            if self.current_hold_duration >= required_time:
+                hold_color = (0, 255, 0)  # Green - requirement met
+                status = "✓ HOLD COMPLETE"
+            elif self.target_position_stable:
+                hold_color = (0, 255, 255)  # Yellow - holding but not complete
+                status = f"{self.current_hold_duration:.1f}s / {required_time:.1f}s"
+            else:
+                hold_color = (0, 0, 255)  # Red - not in position
+                status = "Position unstable"
+            
+            cv2.putText(frame, status, 
+                       (text_x, 470), cv2.FONT_HERSHEY_SIMPLEX, 0.6, hold_color, 2)
+        
         # Current tracking side for bilateral exercises
         if hasattr(self, 'current_tracking_side') and self.current_tracking_side:
             cv2.putText(frame, f"Tracking Side:", 
-                       (text_x, 440), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                       (text_x, 520), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             side_color = (255, 0, 255) if self.current_tracking_side == 'left' else (0, 255, 255)
             cv2.putText(frame, f"{self.current_tracking_side.upper()}", 
-                       (text_x, 470), cv2.FONT_HERSHEY_SIMPLEX, 0.6, side_color, 2)
+                       (text_x, 550), cv2.FONT_HERSHEY_SIMPLEX, 0.6, side_color, 2)
     
     def load_workout_from_json(self, filename):
         """Load workout from JSON file"""
