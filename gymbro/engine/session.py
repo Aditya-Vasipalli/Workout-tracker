@@ -15,6 +15,7 @@ import numpy as np
 
 from ..exercises.schema import Exercise
 from ..pose.filters import KeypointFilter
+from ..pose.orientation import Orientation
 from ..pose.skeleton import NUM_JOINTS, Pose
 from .form import FormReport, RuleResult, Severity, evaluate_rules
 from .repcounter import RepCounter, RepEvent
@@ -55,10 +56,14 @@ class SetTracker:
         side: str | None = None,
         seeded_rom: tuple[float, float] | None = None,
         smoothing: bool = True,
+        orientation: Orientation | None = None,
     ) -> None:
         self.exercise = exercise
         self.target_reps = target_reps
         self.side = side if exercise.unilateral else None
+        # Gravity alignment happens before anything measures the pose, so
+        # every rule and signal downstream is camera-tilt independent.
+        self.orientation = orientation
 
         c = exercise.criteria
         self.counter = RepCounter(
@@ -74,6 +79,13 @@ class SetTracker:
 
         self._filter = KeypointFilter(NUM_JOINTS) if smoothing else None
         self._rule_results: list[RuleResult] = []
+        # Which rules failed at any point during each completed rep. A fault
+        # that occupies a few frames at the top of every rep is a fault on
+        # every rep; frame-weighting buries it under the rules that pass on
+        # all 300 frames of the set.
+        self._rep_failures: list[dict[str, bool]] = []
+        self._current_rep_failures: dict[str, bool] = {}
+        self._rule_severity: dict[str, Severity] = {}
         self._context: dict = {"reference_positions": {}}
         self._start_time: float | None = None
         self._last_time: float | None = None
@@ -95,6 +107,9 @@ class SetTracker:
                 rep_count=self.counter.count, signal=float("nan"),
                 message="No one detected - step into frame", tracking_ok=False,
             )
+
+        if self.orientation is not None:
+            pose = self.orientation.apply(pose)
 
         if self._filter is not None:
             smoothed = self._filter(pose.world, timestamp, pose.confidence)
@@ -127,7 +142,17 @@ class SetTracker:
         report = evaluate_rules(self.exercise.rules, pose, self._context)
         self._rule_results.extend(report.results)
 
+        for result in report.evaluated:
+            self._rule_severity[result.name] = result.severity
+            if not result.passed:
+                self._current_rep_failures[result.name] = True
+            else:
+                self._current_rep_failures.setdefault(result.name, False)
+
         rep = self.counter.update(signal, timestamp)
+        if rep is not None:
+            self._rep_failures.append(dict(self._current_rep_failures))
+            self._current_rep_failures = {}
 
         # Unsafe form is worth interrupting for, mid-rep. Otherwise, explain
         # why a movement just failed to count before offering a technique cue.
@@ -151,6 +176,25 @@ class SetTracker:
             tracking_ok=True,
             form=report,
         )
+
+    def _rep_weighted_score(self) -> float | None:
+        """Fraction of (rule, rep) pairs passed, weighted by severity.
+
+        Returns None when no reps completed, so the caller can fall back to
+        frame weighting rather than reporting a score built on nothing.
+        """
+        if not self._rep_failures:
+            return None
+
+        weights = {Severity.CUE: 1.0, Severity.FAULT: 2.0, Severity.UNSAFE: 4.0}
+        total = earned = 0.0
+        for rep in self._rep_failures:
+            for name, failed in rep.items():
+                w = weights[self._rule_severity.get(name, Severity.FAULT)]
+                total += w
+                if not failed:
+                    earned += w
+        return (earned / total) if total else None
 
     def _seed_reference_positions(self, pose: Pose) -> None:
         """Record where 'still' joints started, for stillness rules."""
@@ -181,7 +225,9 @@ class SetTracker:
                 f"Only {quality * 100:.0f}% of frames tracked cleanly - "
                 f"reposition the camera before trusting these numbers."
             )
-        score = report.score()
+        score = self._rep_weighted_score()
+        if score is None:
+            score = report.score()
         if score is None and self._rule_results:
             warnings.append(
                 "Not enough of your body was visible to score form for this set."

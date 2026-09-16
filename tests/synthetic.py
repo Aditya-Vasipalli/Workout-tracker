@@ -115,3 +115,27 @@ def bridge_sequence(
                 pose.world = pose.world + rng.normal(0, noise_m, pose.world.shape)
             yield pose, t
             t += 1.0 / fps
+
+
+def supine_rest_pose(timestamp: float = 0.0, confidence: float = 0.95) -> Pose:
+    """Someone lying flat on a mat, knees bent, feet planted.
+
+    Shoulders, heels and the back of the head are all touching the floor, which
+    is what the 'floor' orientation calibration asks the user to hold. The
+    bridge rig places the ankle by rotation and so does not model floor contact;
+    this does, and is what calibration accuracy should be measured against.
+
+    Floor is the plane y = 0. Body thickness lifts the hips slightly above it.
+    """
+    j: dict[str, tuple[float, float, float]] = {}
+    for side, sx in (("left", -0.17), ("right", 0.17)):
+        j[f"{side}_shoulder"] = (sx, 0.00, -0.50)      # on the floor
+        j[f"{side}_hip"] = (sx * 0.9, 0.09, 0.00)      # body thickness
+        j[f"{side}_knee"] = (sx * 0.9, 0.42, 0.26)     # knees bent up
+        j[f"{side}_ankle"] = (sx * 0.9, 0.07, 0.44)
+        j[f"{side}_heel"] = (sx * 0.9, 0.00, 0.47)     # on the floor
+        j[f"{side}_foot_index"] = (sx * 0.9, 0.06, 0.60)
+        j[f"{side}_elbow"] = (sx * 1.3, 0.02, -0.28)
+        j[f"{side}_wrist"] = (sx * 1.4, 0.02, -0.08)
+    j["nose"] = (0.0, 0.10, -0.66)
+    return make_pose(j, confidence=confidence, timestamp=timestamp)

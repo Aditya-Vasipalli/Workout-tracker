@@ -32,6 +32,10 @@
     min_rep_s: 1.2
     min_hold_s: 1.0
   rules:
+    - type: pelvic_control
+      neutral_lo: 160
+      neutral_hi: 186
+      severity: fault
     - type: hip_extension
       min_angle_deg: 165
       severity: cue
@@ -72,6 +76,10 @@
     min_rep_s: 1.2
     min_hold_s: 1.0
   rules:
+    - type: pelvic_control
+      neutral_lo: 160
+      neutral_hi: 186
+      severity: fault
     - type: hip_extension
       min_angle_deg: 165
       severity: cue
@@ -117,6 +125,10 @@
     min_rep_s: 1.5
     min_hold_s: 2.0
   rules:
+    - type: pelvic_control
+      neutral_lo: 160
+      neutral_hi: 186
+      severity: fault
     - type: hip_extension
       min_angle_deg: 170
       cue: Finish the lockout - squeeze until your hips are fully extended

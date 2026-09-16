@@ -80,6 +80,9 @@ def cmd_train(args) -> int:
         phone_url=args.phone,
         backend=args.backend,
         show_video=not args.headless,
+        voice_enabled=not args.quiet,
+        calibrate=args.calibrate,
+        chattiness=args.chattiness,
     )
 
 
@@ -165,6 +168,85 @@ def cmd_export(args) -> int:
     return 0
 
 
+# ----------------------------------------------------------------------- setup
+
+
+def cmd_setup(args) -> int:
+    """Live framing and camera-angle check. Use this before your first session."""
+    try:
+        import cv2
+        from .pose.backends import create_backend
+        from .pose.cameras import CameraSource
+        from .pose.framing import check_framing
+        from .pose.orientation import OrientationCalibrator, describe_tilt
+    except ImportError as exc:
+        print(f"{RED}Camera dependencies missing: {exc}{RESET}")
+        return 1
+
+    exercise = get_exercise(args.exercise)
+    required = exercise.required_joints("left" if exercise.unilateral else None)
+
+    print(f"\n{BOLD}Framing check: {exercise.name}{RESET}")
+    print(f"  Wants a {exercise.preferred_view.value} view.")
+    if exercise.setup:
+        print(f"  {exercise.setup}")
+    print(f"\n  Get into position. Press q when you're happy.\n")
+
+    source = CameraSource(args.camera, "laptop")
+    if not source.open():
+        print(f"{RED}Could not open camera {args.camera}.{RESET}")
+        return 1
+
+    backend = create_backend(args.backend)
+    calibrator = OrientationCalibrator(args.calibrate if args.calibrate != "off" else "floor")
+    last_print = 0.0
+
+    try:
+        import time
+
+        while True:
+            frame = source.read()
+            if frame is None:
+                continue
+            image = cv2.flip(frame.image, 1)
+            h, w = image.shape[:2]
+            pose = backend.estimate(image, time.monotonic())
+            report = check_framing(pose, w, h, required)
+            if pose is not None:
+                calibrator.add(pose)
+
+            if time.monotonic() - last_print > 1.5:
+                last_print = time.monotonic()
+                mark = f"{GREEN}ok{RESET}" if report.usable else f"{YELLOW}..{RESET}"
+                print(f"  {mark} {report.coverage:.0%} of needed joints | " +
+                      " ".join(report.advice))
+
+            preview = image
+            if pose is not None:
+                for name in required:
+                    from .pose.skeleton import JOINT_INDEX
+                    x, y = pose.pixels[JOINT_INDEX[name]]
+                    good = pose.confidence[JOINT_INDEX[name]] >= 0.4
+                    cv2.circle(preview, (int(x), int(y)), 5,
+                               (80, 220, 100) if good else (60, 60, 240), -1)
+            cv2.putText(preview, f"{report.coverage:.0%} visible", (16, 34),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                        (80, 220, 100) if report.usable else (40, 200, 240), 2)
+            cv2.imshow("gymbro setup", preview)
+            if (cv2.waitKey(1) & 0xFF) == ord("q"):
+                break
+    finally:
+        source.close()
+        backend.close()
+        cv2.destroyAllWindows()
+
+    result = calibrator.result()
+    if result is not None:
+        print(f"\n  {describe_tilt(result)}")
+    print()
+    return 0
+
+
 # ---------------------------------------------------------------------- doctor
 
 
@@ -229,6 +311,14 @@ def build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--phone", default="", help="phone stream URL for a second view")
     tr.add_argument("--backend", default="mediapipe", choices=["mediapipe", "movenet"])
     tr.add_argument("--headless", action="store_true", help="no video window")
+    tr.add_argument("--quiet", action="store_true", help="no spoken coaching")
+    tr.add_argument("--chattiness", default="normal",
+                    choices=["quiet", "normal", "pushy"],
+                    help="how often it corrects you (default: normal)")
+    tr.add_argument("--calibrate", default="floor",
+                    choices=["floor", "standing", "off"],
+                    help="how to find which way is up. 'floor' works lying "
+                         "down; use it if you can't stand up in frame")
     tr.set_defaults(func=cmd_train)
 
     s = sub.add_parser("status", help="streak, debt and history")
@@ -244,6 +334,15 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("export", help="export your data")
     x.add_argument("--out", default="./gymbro_export")
     x.set_defaults(func=cmd_export)
+
+    st = sub.add_parser("setup", help="live framing check for a cramped space")
+    st.add_argument("--exercise", default="glute_bridge",
+                    help="which exercise to frame for (default: glute_bridge)")
+    st.add_argument("--camera", type=int, default=0)
+    st.add_argument("--backend", default="mediapipe", choices=["mediapipe", "movenet"])
+    st.add_argument("--calibrate", default="floor",
+                    choices=["floor", "standing", "off"])
+    st.set_defaults(func=cmd_setup)
 
     d = sub.add_parser("doctor", help="check the setup")
     d.set_defaults(func=cmd_doctor)

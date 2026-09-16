@@ -227,9 +227,8 @@
     min_rep_s: 3.0
     max_rep_s: 600.0
   rules:
-    - type: spine_neutral
-      max_flexion_deg: 15
-      cue: Your hips are dropping - squeeze your glutes and lift them into line
+    - type: hip_sag
+      max_sag_deg: 12
       severity: fault
 
 - id: side_plank

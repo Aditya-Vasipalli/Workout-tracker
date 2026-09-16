@@ -9,6 +9,7 @@ priority. 42 exercises: 17 glute-focused, 12 pilates, 13 dumbbell/band.
 ```bash
 pip install -r requirements.txt
 python -m gymbro.cli doctor      # check your setup
+python -m gymbro.cli setup       # frame the camera (do this first)
 python -m gymbro.cli today       # see today's session
 python -m gymbro.cli train       # do it, with the camera watching
 ```
@@ -112,6 +113,121 @@ pretending you did sessions you didn't.
 
 ---
 
+## Awkward camera angles
+
+If the laptop sits on a table and you train on the floor underneath it, the
+camera looks steeply down at you. That breaks more than it looks like it does,
+so it is handled explicitly.
+
+**The problem.** MediaPipe's world landmarks are *camera-aligned*: +Y is up in
+the image, not up in the world. A camera pitched 60 degrees down delivers the
+whole skeleton rotated by 60 degrees, and anything measured against vertical
+then reports the camera's tilt rather than your posture. Measured before the
+fix, `torso_upright` tracked camera pitch 1:1 -- a 60-degree camera moved the
+reading by a full 60 degrees, and the height-based signals flipped sign.
+
+**The fix.** A short calibration at the start of each session works out which
+way is actually up, and every pose is rotated into a gravity-aligned frame
+before anything measures it. Recovered camera tilt is accurate to under a
+degree across 0-85 degrees of pitch in tests.
+
+Two calibration methods, because a cramped space may not let you stand in frame:
+
+```bash
+python -m gymbro.cli train --calibrate floor      # default: lie flat, hold still
+python -m gymbro.cli train --calibrate standing   # stand upright, hold still
+python -m gymbro.cli train --calibrate off        # assume the camera is level
+```
+
+`floor` reads the plane through your shoulders and heels, which stay on the mat
+even while your hips move, so it survives you bridging mid-calibration.
+
+**What it does not fix.** Correcting the rotation does not recover information
+the camera never had. Past roughly 45 degrees of tilt, depth-dependent
+measurements degrade because the pose model is extrapolating a viewpoint it
+saw little of in training. The session tells you the measured tilt and says so
+when it is steep. Believe it.
+
+Run `gymbro setup` before your first session: it shows the live view, marks
+which joints it can and cannot see for a given exercise, and says which way to
+move.
+
+```bash
+python -m gymbro.cli setup --exercise hip_thrust
+```
+
+---
+
+## Spoken coaching
+
+Live corrections while you lift, not a report afterwards.
+
+```bash
+python -m gymbro.cli train                       # coaching on
+python -m gymbro.cli train --chattiness pushy    # corrects sooner, more often
+python -m gymbro.cli train --chattiness quiet    # only the important things
+python -m gymbro.cli train --quiet               # silent
+```
+
+Press `m` during a set to mute or unmute.
+
+What it actually says, from a real simulated set where reps 3-6 were done with
+the back arching past lockout:
+
+```
+[ 0.0s]  Glute Bridge. 9 reps.
+[ 3.4s]  1
+[ 7.1s]  2
+[11.0s]  3
+[11.0s]  Hold the squeeze at the top.
+[14.7s]  4
+[15.9s]  Tuck your pelvis under and drop your ribs - you're arching your
+         back, not squeezing your glutes
+[18.5s]  5
+[22.2s]  6
+[25.8s]  7
+[25.8s]  That's it.
+[33.6s]  Set complete. 5 of 9 were clean.
+```
+
+The design rules behind that, each of which took a bug to get right:
+
+- **Speech never blocks the capture loop.** `pyttsx3.runAndWait()` blocks until
+  the phrase finishes; calling it from the frame loop stalls pose estimation
+  for the whole utterance. Speech runs on its own thread.
+- **A fault must recur before it is called.** Single-frame faults are jitter.
+  Faults are counted both over a frame window *and* per rep -- counting
+  consecutive frames alone silently broke every phase-scoped rule, since a
+  lockout check only runs at the top of a rep and could never accumulate.
+- **One instruction at a time**, with a three-second gap. Three corrections at
+  once means acting on none. Safety corrections may interrupt.
+- **Cues say which way to move.** Sagging hips and piking hips need opposite
+  advice, so the underlying measurement is signed -- `angle_3d` returns an
+  interior angle capped at 180 and reports the same number for a 165-degree hip
+  and a 195-degree one.
+- **Ignoring a cue escalates it.** The same words a third time read as a stuck
+  record.
+- **Fixing something gets acknowledged**, judged per rep. Confirming on a run of
+  clean frames congratulates you halfway up the rep you are still botching.
+- **Invisible joints never produce cues.** A skipped rule is silent, not a
+  confident instruction based on nothing.
+
+### What the posture cues are actually measuring
+
+Worth being precise, because the cue wording is more confident than the sensor:
+
+- **"Tuck your pelvis under"** -- MediaPipe has no pelvis or spine landmarks, so
+  true pelvic tilt is not observable. What is measured is the shoulder-hip-knee
+  angle overshooting a straight line at the top of a bridge, which is what
+  happens when you run out of hip extension and borrow the rest from your lower
+  back. It catches the gross version, not a few degrees.
+- **"Brace your core"** -- muscle activation cannot be seen. What is measured is
+  the consequence: your hip line dropping below, or piking above, straight.
+- **Symmetry, knee tracking, joint ranges** -- these are measured directly in 3D
+  and are the most trustworthy of the lot.
+
+---
+
 ## Fitness tracking
 
 Data lives in SQLite at `~/.gymbro/gymbro.db`. Nothing depends on a third-party
@@ -186,7 +302,7 @@ numpy and has no camera or model dependency, which is why the rep and form
 logic can be tested against synthetic poses:
 
 ```bash
-python -m pytest tests/ -q      # 86 tests, no camera needed
+python -m pytest tests/ -q      # 185 tests, no camera needed
 ```
 
 ---
@@ -207,6 +323,9 @@ Stated because a coach you can't trust is worse than no coach.
   numbers.** They were chosen to flag the errors that show up in these
   movements; they haven't been checked against expert coach ratings. Treat cues
   as prompts to think about a position, not verdicts.
+- **Nothing here has been tested on a real body yet.** Every test runs against
+  synthetic poses. The geometry and rep logic are verified; the form tolerances
+  are informed guesses that will need adjusting against real video.
 - **MediaPipe runs on CPU** in its Python wheels. Fine in real time on your
   hardware, but your GPU is idle. See the note in `requirements.txt` for the
   ONNX route if you want it.

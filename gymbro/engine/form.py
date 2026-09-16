@@ -22,7 +22,9 @@ from typing import Callable
 
 import numpy as np
 
-from ..pose.geometry import angle_3d, point_line_distance, to_torso_frame, torso_frame
+from ..pose.geometry import (
+    angle_3d, point_line_distance, signed_angle_about_axis, to_torso_frame, torso_frame,
+)
 from ..pose.skeleton import Pose
 
 
@@ -42,6 +44,9 @@ class RuleResult:
     cue: str
     skipped: bool = False
     skip_reason: str = ""
+    # "high" = measurement above the target band, "low" = below. Lets the
+    # spoken cue say which way to move instead of only that something is off.
+    direction: str | None = None
 
 
 @dataclass
@@ -57,6 +62,17 @@ class FormRule:
     requires_3d: bool = False
     # Only evaluate during this phase of the rep, if set.
     phase: str | None = None
+    # Direction-specific corrections. "Your knee angle is wrong" is useless;
+    # "walk your feet closer" tells you what to actually do.
+    cue_high: str = ""
+    cue_low: str = ""
+
+    def resolve_cue(self, direction: str | None) -> str:
+        if direction == "high" and self.cue_high:
+            return self.cue_high
+        if direction == "low" and self.cue_low:
+            return self.cue_low
+        return self.cue
 
     def evaluate(self, pose: Pose, context: dict | None = None) -> RuleResult:
         context = context or {}
@@ -77,15 +93,22 @@ class FormRule:
             )
 
         try:
-            passed, measured = self.check(pose, context)
+            outcome = self.check(pose, context)
         except Exception as exc:  # a broken rule must not kill the session
             return RuleResult(
                 self.name, True, float("nan"), self.target, self.severity, self.cue,
                 skipped=True, skip_reason=f"rule error: {exc}",
             )
 
+        if len(outcome) == 3:
+            passed, measured, direction = outcome
+        else:
+            passed, measured = outcome
+            direction = None
+
         return RuleResult(
-            self.name, bool(passed), float(measured), self.target, self.severity, self.cue
+            self.name, bool(passed), float(measured), self.target, self.severity,
+            self.resolve_cue(direction), direction=direction,
         )
 
 
@@ -102,16 +125,23 @@ def joint_angle_range(
     cue: str,
     severity: Severity = Severity.FAULT,
     phase: str | None = None,
+    cue_high: str = "",
+    cue_low: str = "",
 ) -> FormRule:
     """Require a joint angle to sit within [lo, hi] degrees."""
 
-    def check(pose: Pose, ctx: dict) -> tuple[bool, float]:
+    def check(pose: Pose, ctx: dict):
         a = angle_3d(pose.joint(triplet[0]), pose.joint(triplet[1]), pose.joint(triplet[2]))
-        return (lo <= a <= hi, a)
+        if a > hi:
+            return (False, a, "high")
+        if a < lo:
+            return (False, a, "low")
+        return (True, a, None)
 
     return FormRule(
         name=name, joints=triplet, check=check,
         target=f"{lo:.0f}-{hi:.0f} deg", cue=cue, severity=severity, phase=phase,
+        cue_high=cue_high, cue_low=cue_low,
     )
 
 
@@ -270,6 +300,129 @@ def stillness(
         name=name, joints=(joint,), check=check,
         target=f"<={max_drift_m * 100:.0f}cm drift", cue=cue,
         severity=severity, requires_3d=True,
+    )
+
+
+def hip_line_angle(pose: Pose) -> float:
+    """Shoulder-hip-knee angle on a continuous 0-360 scale.
+
+    `angle_3d` returns an interior angle capped at 180, so it reports 165 for
+    both a 165-degree hip (under-extended) and a 195-degree one (hyperextended
+    past straight). Those are opposite faults needing opposite corrections --
+    telling someone to lift their hips when they are already piking is worse
+    than saying nothing.
+
+    The sign comes from rotation about the anatomical lateral axis
+    (left hip -> right hip), which is defined by landmarks rather than by world
+    orientation, so it stays consistent whether the subject is supine, prone or
+    standing. Below 180 is hip flexion; above 180 is hyperextension.
+    """
+    shoulder = (pose.joint("left_shoulder") + pose.joint("right_shoulder")) / 2
+    hip = (pose.joint("left_hip") + pose.joint("right_hip")) / 2
+    knee = (pose.joint("left_knee") + pose.joint("right_knee")) / 2
+    axis = pose.joint("right_hip") - pose.joint("left_hip")
+
+    signed = signed_angle_about_axis(shoulder, hip, knee, axis)
+    if not np.isfinite(signed):
+        return float("nan")
+    return signed if signed >= 0 else 360.0 + signed
+
+
+def pelvic_control(
+    name: str = "pelvic_control",
+    neutral_lo: float = 160.0,
+    neutral_hi: float = 186.0,
+    severity: Severity = Severity.FAULT,
+    phase: str | None = "peak",
+) -> FormRule:
+    """Catch hip extension achieved by arching the back rather than the glutes.
+
+    An honest note on what this measures. MediaPipe has no pelvis or spine
+    landmarks -- no ASIS, no sacrum -- so true pelvic tilt is not observable.
+    What *is* observable is the shoulder-hip-knee angle overshooting a straight
+    line at the top of a bridge or thrust, which is what happens when someone
+    runs out of hip extension and borrows the rest from lumbar extension. It is
+    a proxy for the fault, not a measurement of pelvic angle, and it catches the
+    gross version rather than a few degrees.
+    """
+    joints = ("left_shoulder", "right_shoulder", "left_hip", "right_hip",
+              "left_knee", "right_knee")
+
+    def check(pose: Pose, ctx: dict):
+        a = hip_line_angle(pose)
+        if not np.isfinite(a):
+            return (True, a, None)
+        if a > neutral_hi:
+            return (False, a, "high")
+        if a < neutral_lo:
+            return (False, a, "low")
+        return (True, a, None)
+
+    return FormRule(
+        name=name, joints=joints, check=check,
+        target=f"{neutral_lo:.0f}-{neutral_hi:.0f} deg",
+        cue="Keep your hips in line with your shoulders and knees",
+        cue_high="Tuck your pelvis under and drop your ribs - you're arching your back, not squeezing your glutes",
+        cue_low="Push your hips higher and squeeze your glutes at the top",
+        severity=severity, requires_3d=True, phase=phase,
+    )
+
+
+def hip_sag(
+    name: str = "hip_line",
+    max_sag_deg: float = 12.0,
+    severity: Severity = Severity.FAULT,
+) -> FormRule:
+    """Hips dropping or piking in a plank-type hold.
+
+    The spoken cue is "brace your core", because that is the correction, but
+    what is measured is the hip line -- muscle activation is not observable
+    from pose. Saying it this way is the honest version of a core cue.
+    """
+    joints = ("left_shoulder", "right_shoulder", "left_hip", "right_hip",
+              "left_knee", "right_knee")
+
+    def check(pose: Pose, ctx: dict):
+        a = hip_line_angle(pose)
+        if not np.isfinite(a):
+            return (True, a, None)
+        # Positive deviation = hyperextension (hips dropped through the line);
+        # negative = flexion (hips piked up).
+        deviation = a - 180.0
+        if deviation > max_sag_deg:
+            return (False, deviation, "high")
+        if deviation < -max_sag_deg:
+            return (False, deviation, "low")
+        return (True, deviation, None)
+
+    return FormRule(
+        name=name, joints=joints, check=check,
+        target=f"within {max_sag_deg:.0f} deg of a straight line",
+        cue="Straighten your body into one line",
+        cue_high="Brace your core and lift your hips - they're sagging",
+        cue_low="Drop your hips - you're piking up too high",
+        severity=severity, requires_3d=True,
+    )
+
+
+def limb_straight(
+    name: str,
+    triplet: tuple[str, str, str],
+    min_angle_deg: float = 160.0,
+    cue: str = "Straighten that limb",
+    severity: Severity = Severity.CUE,
+    phase: str | None = None,
+) -> FormRule:
+    """A limb that should be extended (bird dog, swimming, leg circles)."""
+
+    def check(pose: Pose, ctx: dict):
+        a = angle_3d(*[pose.joint(j) for j in triplet])
+        return (a >= min_angle_deg, a, None if a >= min_angle_deg else "low")
+
+    return FormRule(
+        name=name, joints=triplet, check=check,
+        target=f">={min_angle_deg:.0f} deg", cue=cue,
+        cue_low=cue, severity=severity, phase=phase,
     )
 
 

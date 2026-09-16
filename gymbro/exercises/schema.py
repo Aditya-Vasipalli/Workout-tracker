@@ -14,8 +14,8 @@ from enum import Enum
 import numpy as np
 
 from ..engine.form import (
-    FormRule, Severity, hip_above_line, joint_angle_range, knee_tracking,
-    spine_neutral, stillness, symmetry, torso_upright,
+    FormRule, Severity, hip_above_line, hip_sag, joint_angle_range, knee_tracking,
+    limb_straight, pelvic_control, spine_neutral, stillness, symmetry, torso_upright,
 )
 from ..pose.geometry import angle_3d
 from ..pose.skeleton import Pose
@@ -177,6 +177,9 @@ _RULE_BUILDERS = {
     "hip_extension": hip_above_line,
     "torso_upright": torso_upright,
     "stillness": stillness,
+    "pelvic_control": pelvic_control,
+    "hip_sag": hip_sag,
+    "limb_straight": limb_straight,
 }
 
 
