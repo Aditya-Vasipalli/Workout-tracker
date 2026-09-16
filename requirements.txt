@@ -1,19 +1,24 @@
-# AI Workout Tracker Requirements
-# Enhanced version with 25+ exercises
-
-# Core packages for pose detection
-opencv-python>=4.8.0
-mediapipe>=0.10.0
-numpy>=1.21.0
-pyttsx3>=2.90
-
-# Additional useful packages  
-pillow>=8.0.0
-matplotlib>=3.5.0
-
-# Installation commands:
-# For Python 3.10-3.12 (recommended):
-# py -3.10 -m pip install -r requirements.txt
+# gymbro requirements
 #
-# For Python 3.13+ (MediaPipe not supported):
-# py -3.13 -m pip install opencv-python numpy pyttsx3
+# MediaPipe needs Python 3.9-3.12. On 3.13+ it has no wheel yet; use 3.12.
+
+# --- core (needed for everything) ---
+numpy>=1.24
+PyYAML>=6.0
+
+# --- vision (needed for `gymbro train`) ---
+opencv-python>=4.8
+mediapipe>=0.10.9        # BlazePose GHUM: metric 3D world landmarks
+
+# --- optional ---
+pyttsx3>=2.90            # spoken rep counts and cues
+
+# --- development ---
+pytest>=7.4
+
+# GPU note: MediaPipe's Python wheels run the pose graph on CPU. On an RTX 4060
+# that is still comfortably real-time at model_complexity=2 (the heavy model),
+# which is what gymbro uses by default. If you later want GPU inference, the
+# path is ONNX Runtime with the CUDA provider and an RTMPose or ViTPose model
+# behind the same PoseBackend protocol in gymbro/pose/backends.py -- nothing
+# downstream of the backend needs to change.

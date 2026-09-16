@@ -1,396 +1,212 @@
-# AI Workout Tracker 🏋️‍♀️
+# gymbro
 
-✅ **Status**: Successfully tested with Python 3.10.1! All features working.
+A workout coach that prescribes your training, watches you do it, and only
+gives you credit for reps it actually verified.
 
-A comprehensive Python-based workout tracking system with **25+ exercises** that counts reps and analyzes form quality in real-time using your webcam.
-
-## 🚀 Quick Start
+Built around dumbbells, resistance bands and a mat, with glute work as the
+priority. 42 exercises: 17 glute-focused, 12 pilates, 13 dumbbell/band.
 
 ```bash
-# Run the main program
-py -3.10 main.py
+pip install -r requirements.txt
+python -m gymbro.cli doctor      # check your setup
+python -m gymbro.cli today       # see today's session
+python -m gymbro.cli train       # do it, with the camera watching
 ```
-
-## 🎯 Three Versions Available
-
-### 1. Enhanced Tracker (`enhanced_workout_tracker.py`) - **NEW!**
-- **25+ exercises** including leg, core, upper body, and stretches
-- **Real-time pose detection** using MediaPipe BlazePose
-- **Advanced form analysis** with detailed scoring
-- **Female voice text-to-speech** with intelligent feedback
-- **Time-based exercises** (planks, holds) and rep-based
-- **Requires Python 3.8-3.12** (MediaPipe limitation)
-
-### 2. Original Tracker (`workout_tracker.py`)
-- **Bicep curls and squats** with precise angle tracking
-- **Real-time pose detection** using MediaPipe BlazePose
-- **Form quality scoring** based on joint angles
-- **Requires Python 3.8-3.12** (MediaPipe limitation)
-
-### 3. Simple Tracker (`simple_workout_tracker.py`)
-- **Motion detection** based rep counting
-- **Works with any Python version** (including 3.13+)
-- **Manual rep counter** for backup
-- **Good for basic workout tracking**r 🏋️‍♂️
-
-✅ **Status**: Successfully tested with Python 3.10.1! All features working.
-
-A Python-based workout tracking system that counts reps and analyzes form quality in real-time using your webcam.
-
-## Two Versions Available 🎯
-
-### 1. Full Version (`workout_tracker.py`)
-- **Real-time pose detection** using MediaPipe BlazePose
-- **Precise angle calculations** for bicep curls and squats
-- **Advanced form analysis** with joint tracking
-- **Requires Python 3.8-3.12** (MediaPipe limitation)
-
-### 2. Simple Version (`simple_workout_tracker.py`)
-- **Motion detection** based rep counting
-- **Works with any Python version** (including 3.13+)
-- **Manual rep counter** for backup
-- **Good for basic workout tracking**
-
-## Features ✨
-
-- **25+ Exercise Support** with intelligent pose detection
-- **Automatic rep counting** with precise joint angle calculations
-- **Advanced form quality scoring** (0-100%) based on:
-  - Range of motion and proper technique
-  - Rep timing and movement control
-  - Joint stability and alignment
-- **Female voice text-to-speech** with intelligent feedback
-  - Only speaks when form is correct (60%+ score)
-  - Counts reps aloud and provides encouragement
-  - Exercise-specific guidance
-- **Session logging** to binary files with detailed analytics
-- **Time-based exercises** for holds and stretches
-- **Interactive terminal interface** with progress tracking
-- **Multiple workout modes** for different skill levels
-
-## 💪 Supported Exercises (25+)
-
-### 🦵 Leg Exercises
-- **Donkey Kicks** - Quadruped leg raises
-- **Fire Hydrants** - Lateral leg raises from hands and knees
-- **Glute Bridges** - Hip thrusts from lying position
-- **Hip Thrusts** - Elevated glute bridges
-- **Plie Squats** - Wide stance squats
-- **Lunges** - Forward/backward lunges
-- **Courtesy Lunges** - Diagonal back lunges
-- **Side Leg Raises** - Lateral leg lifts
-- **Calf Raises** - Rising on toes
-- **Regular Squats** - Hip-knee-ankle tracking
-
-### 🧘 Core Exercises
-- **V-Hold** - Seated V position hold ⏱️
-- **Boat Hold (Center/Left/Right)** - Boat pose variations ⏱️
-- **Planks** - Timed plank holds ⏱️
-- **Crunches** - Abdominal crunches
-- **Leg Raises** - Lying leg lifts
-- **Flutter Kicks** - Alternating leg movements
-- **Russian Twists** - Seated torso rotations
-
-### 💪 Upper Body Exercises
-- **Push-Ups** - Standard push-ups with form analysis
-- **Shoulder Press** - Overhead pressing movements
-- **Arnold Press** - Rotating shoulder press
-- **Bent-Over Rows** - Pulling movements
-- **Dumbbell Pullover** - Overhead pullover motion
-- **Bicep Curls** - Arm curls with angle tracking
-
-### 🎯 Specialized Exercises
-- **Pilates Clamshell** - Side-lying leg opens
-
-### 🧘‍♀️ Stretches (Time-Based ⏱️)
-- **Butterfly Stretch** - Seated groin stretch
-- **Cobra Stretch** - Prone back extension
-- **Frog Stretch** - Wide knee hip stretch
-
-*⏱️ = Time-based exercises (measured in seconds rather than reps)*
-
-## Installation 🚀
-
-### Check Compatibility First
-```bash
-python check_compatibility.py
-```
-
-### Install Packages
-```bash
-pip install opencv-python numpy pyttsx3
-```
-
-### For MediaPipe Support (Full Version)
-MediaPipe requires Python 3.8-3.12:
-```bash
-# Only works with Python 3.8-3.12
-pip install mediapipe
-```
-
-**Note**: If you have Python 3.13+, use the simple version instead.
-
-## Usage 📝
-
-### Main Launcher (Recommended)
-```bash
-py -3.10 main.py
-```
-Interactive menu with options for:
-- Enhanced tracker (25+ exercises)
-- Original tracker (bicep curls & squats)
-- Simple tracker (motion detection)
-- Workout log reading
-- Compatibility checking
-
-### Direct Usage
-
-**Enhanced Tracker (25+ exercises):**
-```bash
-py -3.10 enhanced_workout_tracker.py
-```
-
-**Original Tracker:**
-```bash
-py -3.10 workout_tracker.py
-```
-
-**Simple Tracker (no MediaPipe):**
-```bash
-py -3.10 simple_workout_tracker.py
-```
-
-### Creating Workouts
-
-The enhanced tracker supports custom workout creation:
-
-```
-Exercise examples:
-• donkey_kicks - 3 sets x 15 reps
-• planks - 3 sets x 30 seconds  
-• push_ups - 3 sets x 12 reps
-• v_hold - 3 sets x 20 seconds
-• bicep_curl - 3 sets x 15 reps
-```
-
-### Controls During Exercise
-- **'q'**: Quit camera/exercise
-- **'s'**: Complete current set manually
-- **Enter**: Ready for next set
-
-## 🎯 Smart Features
-
-### Intelligent Voice Feedback
-- **Female voice** (first available female voice)
-- **Only speaks on good form** (60%+ form score)
-- **Rep counting** with encouraging phrases
-- **Exercise-specific guidance**
-
-### Advanced Form Analysis
-- **Joint angle tracking** for precise movement detection
-- **Range of motion validation** for each exercise
-- **Stability checking** to detect shaking or rushed movements
-- **Real-time form scoring** with detailed feedback
-
-### Workout Analytics
-- **Binary log files** with complete workout data
-- **Form score tracking** per set and overall averages
-- **Time stamps** for each set and rep
-- **Progress visualization** in terminal
-
-## 📋 Workout Plan Format
-
-Enhanced tracker supports flexible workout creation:
-
-```python
-# Rep-based exercises
-{"name": "bicep_curl", "sets": 3, "reps": 12}
-{"name": "push_ups", "sets": 3, "reps": 15}
-{"name": "donkey_kicks", "sets": 2, "reps": 20}
-
-# Time-based exercises  
-{"name": "planks", "sets": 3, "reps": 30}  # 30 seconds
-{"name": "v_hold", "sets": 3, "reps": 15}  # 15 seconds
-```
-
-## 🏆 Example Workouts
-
-### Beginner Full Body (15 minutes)
-```python
-workout_plan = [
-    {"name": "squats", "sets": 2, "reps": 10},
-    {"name": "push_ups", "sets": 2, "reps": 8},
-    {"name": "planks", "sets": 2, "reps": 20},  # seconds
-    {"name": "calf_raises", "sets": 2, "reps": 15}
-]
-```
-
-### Advanced Core Focus (20 minutes)
-```python
-workout_plan = [
-    {"name": "v_hold", "sets": 3, "reps": 30},      # seconds
-    {"name": "russian_twists", "sets": 3, "reps": 20},
-    {"name": "leg_raises", "sets": 3, "reps": 15},
-    {"name": "flutter_kicks", "sets": 3, "reps": 25},
-    {"name": "planks", "sets": 3, "reps": 45}       # seconds
-]
-```
-
-### Lower Body Strength (25 minutes)
-```python
-workout_plan = [
-    {"name": "squats", "sets": 3, "reps": 15},
-    {"name": "lunges", "sets": 3, "reps": 12},
-    {"name": "glute_bridges", "sets": 3, "reps": 18},
-    {"name": "donkey_kicks", "sets": 3, "reps": 15},
-    {"name": "calf_raises", "sets": 3, "reps": 20}
-]
-```
-
-## 📁 File Structure
-
-```
-Workout/
-├── main.py                          # 🚀 Main launcher (START HERE)
-├── enhanced_workout_tracker.py      # 25+ exercise tracker
-├── exercise_tracker.py              # Exercise detection algorithms  
-├── workout_tracker.py               # Original bicep/squat tracker
-├── simple_workout_tracker.py        # Motion detection version
-├── check_compatibility.py           # System compatibility checker
-├── examples.py                      # Usage examples and demos
-├── demo.py                         # Interactive demo interface
-├── requirements.txt                # Package dependencies
-├── README.md                       # This documentation
-└── workout_session_*.bin           # Generated workout logs
-```
-
-## 🚀 Getting Started (Quick Guide)
-
-1. **Check your Python version** (3.10-3.12 recommended):
-   ```bash
-   py -3.10 check_compatibility.py
-   ```
-
-2. **Install packages** (if needed):
-   ```bash
-   py -3.10 -m pip install -r requirements.txt
-   ```
-
-3. **Start working out**:
-   ```bash
-   py -3.10 main.py
-   ```
-
-4. **Choose Enhanced Tracker** for full experience
-5. **Create your custom workout** from 25+ exercises
-6. **Position yourself** in front of camera
-7. **Follow the voice guidance** and visual feedback
-8. **Review your logs** to track progress
-
-## 🎯 Tips for Best Results
-
-- **Good lighting** - Well-lit room with clear background
-- **Full body visible** - Make sure camera can see your whole body
-- **Stable camera** - Mount or place camera at chest height
-- **Clear space** - Enough room to move freely
-- **Proper form** - Focus on technique over speed
-- **Listen to voice** - Only counts reps with good form (60%+)
 
 ---
 
-**Happy Training! 🏋️‍♀️💪**
-    "form_violations": ["Rep too fast"]
-}
+## Why the old tracker wasn't accurate
+
+The previous version (`movenet_tracker.py`, kept as `README_old_tracker.md`)
+had four problems, none of which were the pose model's fault. Worth reading if
+you want to know what changed and why.
+
+**1. The preprocessing warped every angle it measured.**
+`preprocess_image` resized a 640×480 frame straight to 256×256. That compresses
+x by 0.400 and y by 0.533 — a non-uniform squash. Every angle computed
+afterwards was measured in a distorted space: a true 45° limb angle read as
+53.1°, a true 30° read as 38°. Not noise, a consistent bias.
+Fixed by aspect-preserving letterboxing (`gymbro/pose/geometry.py`). There's a
+test that pins the old error at 53.13° so it can't come back.
+
+**2. Two-dimensional angles can't measure three-dimensional movement.**
+Angles came from projected pixel coordinates, so they were only correct if you
+stood perfectly perpendicular to the lens. Rotate 30° and the measured angle
+collapses toward the camera plane. For hip thrusts and RDLs, where depth *is*
+the metric, this was fatal.
+Fixed by using MediaPipe's `pose_world_landmarks` — real metric 3D coordinates
+in metres — and doing all geometry in 3D. There's a test proving a 40° body
+rotation changes the rep count and form score by nothing.
+
+**3. The second camera did nothing.**
+`display_dual_camera_feed` ran pose detection on both frames and then *picked
+one*, discarding the other. No fusion, ever. You were paying for two cameras
+and getting one camera's accuracy.
+Now the metric-3D backend means one camera is genuinely enough. A phone as a
+second view is optional (`--phone`), and when used, frames are matched by
+timestamp with an enforced tolerance rather than assumed to be simultaneous.
+
+**4. Rep counting was a state machine that couldn't work.**
+`validate_progressive_movement` required movement through four ordered
+thresholds. Its "skipped progression stage" guard compared stage gaps that were
+always exactly 1 apart, so it could never fire — dead code. And stage 0's
+threshold was frequently already satisfied at rest: for `glute_bridge`,
+thresholds `[140,155,165,175]` meant stage 0 passed while you were lying
+motionless on the floor.
+Replaced with hysteresis on a signal normalised against **your own** calibrated
+range, plus a refractory period. Fixed absolute thresholds were always going to
+be wrong anyway — 165° of hip extension is a full lockout for one body and a
+partial rep for another.
+
+**Also:** form scores were invented numbers (`* 0.3`, `max(5, ...)`,
+`form_score = 10`) that had never been validated against anything.
+
+---
+
+## How scoring works now
+
+Every form rule is a named predicate with an explicit tolerance and a cue in
+plain language. `gymbro exercises --show hip_thrust` lists exactly what gets
+checked.
+
+Rules are weighted by severity — a cue counts 1, a fault 2, something unsafe 4
+— and the score is the fraction of weight passed.
+
+Three properties worth knowing:
+
+- **Rules are phase-scoped.** A lockout check only fires at the top of the rep.
+  Checking it at the bottom, where failing is just what the bottom of a rep
+  looks like, dropped clean sets to 0.88 before this was fixed.
+- **Invisible joints are skipped, not guessed.** If the camera can't see your
+  ankle, the rules needing it are reported as skipped with the reason.
+- **Low coverage returns no score at all.** If under half the rules were
+  checkable, you get "not enough visibility to score" instead of a
+  confident-looking percentage derived from two visible joints.
+
+Depth-dependent rules declare `requires_3d` and are skipped entirely on the 2D
+MoveNet backend rather than silently producing nonsense.
+
+---
+
+## What "forces you" actually means
+
+Software can't make you train. Here's what this does instead, stated plainly:
+
+- **Only verified reps count.** A rep needs full range *and* correct tempo to
+  be a good rep, and only good reps count toward completion (80% threshold).
+  There's no self-report path and no skip key — the old `s` keypress that just
+  incremented the counter is gone.
+- **Load is gated on form, not just reps.** Two consecutive clean sessions
+  raise the target; a session scored below 0.85 holds everything where it is.
+  Adding weight on top of broken technique is how a form problem becomes an
+  injury.
+- **Missed sessions accrue as debt** whether or not you open the app, and debt
+  makes tomorrow's session **shorter**, not longer. A backlog you can't clear
+  is the fastest way to quit entirely. Debt caps at 3.
+- **Streaks tolerate one missed day.** Your longest streak is never lost.
+
+What this won't do is pretend app mechanics are willpower. If you want real
+enforcement, the things that actually work are social or financial stakes.
+These mechanisms make skipping *visible* and stop the program quietly
+pretending you did sessions you didn't.
+
+---
+
+## Fitness tracking
+
+Data lives in SQLite at `~/.gymbro/gymbro.db`. Nothing depends on a third-party
+API.
+
+That's deliberate: **Google Fit can't be used here.** Google closed new
+signups for the Fit APIs on 1 May 2024, and the whole family shuts down at the
+end of 2026 ([migration
+guide](https://developer.android.com/health-and-fitness/health-connect/migration/fit)).
+Even writing the integration today, you couldn't get credentials. The
+replacements are Health Connect (Android-only, on-device, needs a companion
+app), the Google Health API (cloud, ex-Fitbit), and HealthKit on iOS.
+
+`gymbro export` writes CSV, JSON and TCX. TCX imports directly into Strava and
+Garmin Connect. If you later want Health Connect, the store has a clean
+boundary to adapt.
+
+---
+
+## Camera setup
+
+One camera is enough. `gymbro exercises --show <id>` tells you the view each
+exercise wants.
+
+- **Side view** for hinges and bridges — hip thrust, RDL, glute bridge.
+  Camera at hip height, far enough back to see head to feet.
+- **Front view** for anything where knees can cave — squats, lunges, clamshells.
+- Even, diffuse light. Avoid a bright window behind you.
+
+Optional second view from your phone over WiFi:
+
+```bash
+python -m gymbro.cli train --phone http://192.168.1.42:8080/video
 ```
 
-Use the `read_log()` function to view human-readable summaries.
+Use any IP-webcam style app. Expect 100–300 ms of latency; frames are matched
+by timestamp within a 50 ms tolerance and rejected outside it, so a drifting
+stream degrades to single-camera rather than silently corrupting the pose.
 
-## Terminal Output Example 📺
+---
 
-```
-🏋️‍♂️ Starting Bicep Curl
+## Calibration
 
-🏋️  Start Set 1 of Bicep Curl
-Target: 12 reps
-Rep 1 completed - Form: 88%
-Rep 2 completed - Form: 92%
-...
-✅ Bicep Curl - Set 1: 12 reps complete  
-🧠 Form Score: 90%
+The first two reps of a new exercise learn your range of motion, so go through
+your full comfortable movement. After that the range is frozen and stored, and
+"full range" means *your* full range.
 
-🎉 Workout complete!
-Summary:
-- Bicep Curl: 3 sets, 36 total reps, Avg Form: 87%
-- Squat: 3 sets, 45 total reps, Avg Form: 92%
-```
+If your mobility genuinely improves, re-run with `--regenerate` or clear the
+`calibration` row for that exercise.
 
-## Camera Setup Tips 📹
+---
 
-1. **Position yourself** so your full body (or at least the relevant joints) are visible
-2. **Good lighting** helps MediaPipe track your pose better
-3. **Stable camera** - avoid moving the camera during exercises
-4. **Clear background** - plain walls work best
-5. **Side view** often works better than front-facing for form analysis
-
-## Troubleshooting 🔧
-
-### Camera Issues
-- Make sure no other apps are using your webcam
-- Try different camera indices if you have multiple cameras
-- Check lighting conditions
-
-### MediaPipe Detection Issues  
-- Ensure you're fully visible in the camera frame
-- Try wearing fitted clothing for better pose detection
-- Move closer/farther from camera for optimal detection
-
-### Form Scoring Issues
-- Make sure you're performing exercises in the camera's side view
-- Check that the correct joints are visible (shoulders, elbows, wrists for bicep curls)
-- Calibrate by checking the angle display on screen
-
-## Extending the System 🛠️
-
-To add new exercises:
-
-1. **Add exercise config:**
-   ```python
-   "pushup": {
-       "joints": ["shoulder", "elbow", "wrist"],
-       "angle_threshold_low": 90,
-       "angle_threshold_high": 170,
-       "landmarks": [11, 13, 15]
-   }
-   ```
-
-2. **Update the `process_rep()` method** with the new exercise logic
-
-3. **Test with the new exercise** in your workout plan
-
-## Files Structure 📁
+## Layout
 
 ```
-Workout/
-├── workout_tracker.py    # Main tracking system
-├── examples.py          # Usage examples  
-├── README.md           # This file
-├── workout_session.bin # Generated log files
-└── .venv/             # Python virtual environment
+gymbro/
+  pose/        geometry, filtering, backends, camera sources
+  engine/      rep counting, form rules, per-set tracking
+  exercises/   schema, loader, and library/*.yaml
+  program/     workout generation, streaks/debt, progression
+  store/       SQLite and exports
+  coach.py     orchestration
+  runner.py    live camera loop
+  cli.py       command line
 ```
 
-## Dependencies 📦
+Adding an exercise means adding a YAML record, not editing code. The engine
+interprets the spec.
 
-- **OpenCV** (`cv2`) - Camera capture and image processing
-- **MediaPipe** (`mediapipe`) - Pose detection and landmark tracking
-- **NumPy** (`numpy`) - Mathematical calculations
-- **pyttsx3** - Text-to-speech functionality
-- **pickle** - Binary file serialization
+The core (`pose/geometry`, `pose/filters`, `engine/*`, `program/*`) is pure
+numpy and has no camera or model dependency, which is why the rep and form
+logic can be tested against synthetic poses:
 
-## Future Enhancements 🚀
+```bash
+python -m pytest tests/ -q      # 86 tests, no camera needed
+```
 
-- Support for more exercises (push-ups, pull-ups, etc.)
-- Web dashboard for tracking progress over time
-- Integration with fitness apps
-- Video recording of workouts
-- Multi-person detection
-- Resistance band/weight detection
+---
+
+## Known limitations
+
+Stated because a coach you can't trust is worse than no coach.
+
+- **Lumbar rounding is approximated.** MediaPipe has no spine landmarks, so
+  `spine_neutral` uses shoulder-hip-knee as a proxy. It catches gross rounding
+  on an RDL. It will not catch subtle positioning.
+- **Load is what you tell it.** Nothing detects which dumbbell you picked up.
+- **Occlusion is the main failure mode.** Floor work where your body hides your
+  own joints is where tracking quality drops. The set result reports the
+  fraction of frames tracked cleanly; below 60% you get a warning, and you
+  should believe the warning.
+- **Form rule tolerances are informed defaults, not clinically validated
+  numbers.** They were chosen to flag the errors that show up in these
+  movements; they haven't been checked against expert coach ratings. Treat cues
+  as prompts to think about a position, not verdicts.
+- **MediaPipe runs on CPU** in its Python wheels. Fine in real time on your
+  hardware, but your GPU is idle. See the note in `requirements.txt` for the
+  ONNX route if you want it.

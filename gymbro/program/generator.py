@@ -95,6 +95,21 @@ class WorkoutGenerator:
         kwargs.setdefault("max_difficulty", self.difficulty)
         return find(equipment=self.equipment, **kwargs)
 
+    def _pick_anchor(
+        self, candidates: list[Exercise], count: int, exclude: set[str]
+    ) -> list[Exercise]:
+        """The day's primary movements: stable week to week.
+
+        Progressive overload needs the *same* lift to recur so load and reps can
+        climb against a known baseline. Rotating primaries on freshness (as an
+        earlier version did) meant no exercise was ever trained twice in a row,
+        so `consecutive_clears` never reached the threshold and nothing ever
+        progressed. Variety belongs in the accessories, below.
+        """
+        pool = [e for e in candidates if e.id not in exclude]
+        # `find` already returns a deterministic order (glute emphasis, name).
+        return pool[:count]
+
     def _pick(
         self,
         candidates: list[Exercise],
@@ -102,7 +117,7 @@ class WorkoutGenerator:
         recent_volume: dict[str, int],
         exclude: set[str],
     ) -> list[Exercise]:
-        """Prefer movements that are fresh, with a little randomness."""
+        """Accessory selection: prefer movements that are fresh."""
         pool = [e for e in candidates if e.id not in exclude]
         if not pool:
             return []
@@ -192,7 +207,7 @@ class WorkoutGenerator:
 
     def _build_glute_day(self, plan, vol, chosen) -> None:
         heavy = self._available(category="glutes", min_glute_emphasis=0.85)
-        self._add(plan, self._pick(heavy, 2, vol, chosen), 4, 10, chosen, rest=90)
+        self._add(plan, self._pick_anchor(heavy, 2, chosen), 4, 10, chosen, rest=90)
 
         accessory = self._available(category="glutes", min_glute_emphasis=0.6)
         self._add(plan, self._pick(accessory, 2, vol, chosen), 3, 12, chosen, rest=60)
@@ -203,33 +218,39 @@ class WorkoutGenerator:
     def _build_upper_day(self, plan, vol, chosen) -> None:
         push = self._available(category="upper_push")
         pull = self._available(category="upper_pull")
-        self._add(plan, self._pick(push, 2, vol, chosen), 3, 10, chosen)
-        self._add(plan, self._pick(pull, 2, vol, chosen), 3, 10, chosen)
+        self._add(plan, self._pick_anchor(push, 1, chosen), 3, 10, chosen)
+        self._add(plan, self._pick_anchor(pull, 1, chosen), 3, 10, chosen)
+        self._add(plan, self._pick(push, 1, vol, chosen), 3, 10, chosen)
+        self._add(plan, self._pick(pull, 1, vol, chosen), 3, 10, chosen)
         # Glutes still get touched on upper day.
         glute = self._available(category="glutes", min_glute_emphasis=0.85)
         self._add(plan, self._pick(glute, 1, vol, chosen), 3, 15, chosen, rest=45)
 
     def _build_glute_pilates_day(self, plan, vol, chosen) -> None:
         glute = self._available(category="glutes", min_glute_emphasis=0.85)
-        self._add(plan, self._pick(glute, 2, vol, chosen), 3, 12, chosen, rest=75)
+        self._add(plan, self._pick_anchor(glute, 2, chosen), 3, 12, chosen, rest=75)
         pilates = self._available(category="pilates")
         self._add(plan, self._pick(pilates, 3, vol, chosen), 3, 10, chosen, rest=45)
 
     def _build_pilates_day(self, plan, vol, chosen) -> None:
         pilates = self._available(category="pilates")
-        self._add(plan, self._pick(pilates, 5, vol, chosen), 3, 10, chosen, rest=45)
+        # Anchor two, rotate three: core work progresses by hold time and reps,
+        # so it needs recurring movements too.
+        self._add(plan, self._pick_anchor(pilates, 2, chosen), 3, 10, chosen, rest=45)
+        self._add(plan, self._pick(pilates, 3, vol, chosen), 3, 10, chosen, rest=45)
 
     def _build_glute_legs_day(self, plan, vol, chosen) -> None:
         glute = self._available(category="glutes", min_glute_emphasis=0.85)
-        self._add(plan, self._pick(glute, 2, vol, chosen), 4, 10, chosen, rest=90)
+        self._add(plan, self._pick_anchor(glute, 2, chosen), 4, 10, chosen, rest=90)
         legs = self._available(category="legs")
-        self._add(plan, self._pick(legs, 2, vol, chosen), 3, 12, chosen, rest=75)
+        self._add(plan, self._pick_anchor(legs, 2, chosen), 3, 12, chosen, rest=75)
 
     def _build_recovery_day(self, plan, vol, chosen) -> None:
         pilates = self._available(category="pilates", max_difficulty="beginner")
-        self._add(plan, self._pick(pilates, 3, vol, chosen), 2, 10, chosen, rest=30)
+        self._add(plan, self._pick_anchor(pilates, 1, chosen), 2, 10, chosen, rest=30)
+        self._add(plan, self._pick(pilates, 2, vol, chosen), 2, 10, chosen, rest=30)
         glute = self._available(category="glutes", min_glute_emphasis=0.8)
-        self._add(plan, self._pick(glute, 1, vol, chosen), 2, 15, chosen, rest=30)
+        self._add(plan, self._pick_anchor(glute, 1, chosen), 2, 15, chosen, rest=30)
 
     # ------------------------------------------------------------- estimate
 
