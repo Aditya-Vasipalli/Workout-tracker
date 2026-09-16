@@ -1,0 +1,378 @@
+# Dumbbell and resistance-band work for everything that isn't glute-primary.
+# Scoped to what you can actually do at home: dumbbells, bands, a bench or sofa.
+
+# ------------------------------------------------------------------ upper push
+- id: shoulder_press
+  name: Dumbbell Shoulder Press
+  category: upper_push
+  primary_muscles: [deltoids]
+  secondary_muscles: [triceps, core]
+  equipment: [dumbbell]
+  position: standing
+  difficulty: beginner
+  preferred_view: front
+  setup: Dumbbells at shoulder height, palms forward. Camera in front.
+  cues:
+    - Press up and slightly back, finishing with the weights over your ears
+    - Do not arch your lower back to get the weight up
+    - Ribs down, glutes squeezed
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_elbow, left_wrist]
+  criteria:
+    enter_threshold: 0.7
+    exit_threshold: 0.3
+    min_rep_s: 1.2
+  rules:
+    - type: symmetry
+      name: press_symmetry
+      left_triplet: [left_shoulder, left_elbow, left_wrist]
+      right_triplet: [right_shoulder, right_elbow, right_wrist]
+      max_diff_deg: 15
+      cue: One arm is lagging - press both evenly
+    - type: spine_neutral
+      max_flexion_deg: 18
+      cue: You are arching your back to press - lighten the weight
+      severity: unsafe
+
+- id: push_up
+  name: Push-Up
+  category: upper_push
+  primary_muscles: [chest, triceps]
+  secondary_muscles: [shoulders, core]
+  equipment: [bodyweight, mat]
+  position: prone
+  difficulty: intermediate
+  preferred_view: side
+  setup: Hands slightly wider than shoulders. Camera side-on.
+  cues:
+    - Body in one line from head to heels
+    - Elbows at about 45 degrees, not flared to 90
+    - Chest to the floor, full lockout at the top
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_elbow, left_wrist]
+  criteria:
+    enter_threshold: 0.7
+    exit_threshold: 0.3
+    min_rep_s: 1.0
+  rules:
+    - type: spine_neutral
+      max_flexion_deg: 18
+      cue: Your hips are sagging - squeeze your glutes
+      severity: fault
+  regressions: [incline_push_up]
+
+- id: incline_push_up
+  name: Incline Push-Up
+  category: upper_push
+  primary_muscles: [chest, triceps]
+  equipment: [bodyweight, bench]
+  position: prone
+  difficulty: beginner
+  preferred_view: side
+  setup: Hands on a bench, sofa or countertop. Higher surface = easier.
+  cues:
+    - Same straight line as a floor push-up
+    - Lower your chest to the surface
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_elbow, left_wrist]
+  criteria:
+    enter_threshold: 0.7
+    exit_threshold: 0.3
+    min_rep_s: 1.0
+  progressions: [push_up]
+
+- id: floor_press
+  name: Dumbbell Floor Press
+  category: upper_push
+  primary_muscles: [chest, triceps]
+  equipment: [dumbbell, mat]
+  position: supine
+  difficulty: beginner
+  preferred_view: side
+  setup: On your back, knees bent, dumbbells at chest height.
+  cues:
+    - Let your triceps touch the floor, then press
+    - Wrists stacked over your elbows
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_elbow, left_wrist]
+  criteria:
+    enter_threshold: 0.7
+    exit_threshold: 0.3
+    min_rep_s: 1.2
+  rules:
+    - type: symmetry
+      name: press_symmetry
+      left_triplet: [left_shoulder, left_elbow, left_wrist]
+      right_triplet: [right_shoulder, right_elbow, right_wrist]
+      max_diff_deg: 15
+      cue: Press both arms evenly
+
+- id: lateral_raise
+  name: Dumbbell Lateral Raise
+  category: upper_push
+  primary_muscles: [deltoids]
+  equipment: [dumbbell]
+  position: standing
+  difficulty: beginner
+  preferred_view: front
+  setup: Dumbbells at your sides, slight bend in the elbows. Camera in front.
+  cues:
+    - Lead with your elbows, not your hands
+    - Stop at shoulder height
+    - No swinging - if you need momentum, go lighter
+  signal:
+    kind: abduction
+    joints: [left_shoulder, left_wrist]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.3
+    min_rep_s: 1.5
+  rules:
+    - type: torso_upright
+      max_lean_deg: 15
+      cue: Stop swinging your torso - lighter weight, stricter form
+      severity: fault
+
+# ------------------------------------------------------------------ upper pull
+- id: bent_over_row
+  name: Dumbbell Bent-Over Row
+  category: upper_pull
+  primary_muscles: [lats, rhomboids]
+  secondary_muscles: [biceps, erector_spinae]
+  equipment: [dumbbell]
+  position: hinge
+  difficulty: intermediate
+  preferred_view: side
+  setup: Hinge forward ~45 degrees, dumbbells hanging. Camera side-on.
+  cues:
+    - Pull your elbows past your ribs
+    - Squeeze your shoulder blades together at the top
+    - Back stays flat throughout
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_elbow, left_wrist]
+    invert: true
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.3
+    min_rep_s: 1.2
+  rules:
+    - type: spine_neutral
+      max_flexion_deg: 25
+      cue: Your back is rounding - lighten the weight and keep a long spine
+      severity: unsafe
+
+- id: single_arm_row
+  name: Single-Arm Dumbbell Row
+  category: upper_pull
+  primary_muscles: [lats, rhomboids]
+  secondary_muscles: [biceps]
+  equipment: [dumbbell, bench]
+  position: hinge
+  difficulty: beginner
+  unilateral: true
+  preferred_view: side
+  setup: One hand and knee on a bench, other arm hanging with the dumbbell.
+  cues:
+    - Pull the dumbbell to your hip, not your shoulder
+    - Do not rotate your torso to lift it
+  signal:
+    kind: joint_angle
+    joints: ["{side}_shoulder", "{side}_elbow", "{side}_wrist"]
+    invert: true
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.3
+    min_rep_s: 1.2
+
+- id: band_pull_apart
+  name: Band Pull-Apart
+  category: upper_pull
+  primary_muscles: [rear_deltoids, rhomboids]
+  equipment: [band]
+  position: standing
+  difficulty: beginner
+  preferred_view: front
+  setup: Band held at shoulder width, arms straight out in front.
+  cues:
+    - Pull the band apart until it touches your chest
+    - Keep your arms straight - the movement is at the shoulder blades
+  signal:
+    kind: joint_distance
+    joints: [left_wrist, right_wrist]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.3
+    min_rep_s: 1.0
+    min_hold_s: 0.5
+
+- id: bicep_curl
+  name: Dumbbell Bicep Curl
+  category: upper_pull
+  primary_muscles: [biceps]
+  equipment: [dumbbell]
+  position: standing
+  difficulty: beginner
+  preferred_view: front
+  setup: Dumbbells at your sides, palms forward. Camera in front or at 45 degrees.
+  cues:
+    - Elbows pinned to your ribs
+    - No swinging - your torso should not move
+    - Lower under control, all the way down
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_elbow, left_wrist]
+    invert: true
+  criteria:
+    enter_threshold: 0.7
+    exit_threshold: 0.3
+    min_rep_s: 1.2
+  rules:
+    - type: torso_upright
+      max_lean_deg: 15
+      cue: You are swinging the weight up - go lighter and keep your torso still
+      severity: fault
+    - type: symmetry
+      name: curl_symmetry
+      left_triplet: [left_shoulder, left_elbow, left_wrist]
+      right_triplet: [right_shoulder, right_elbow, right_wrist]
+      max_diff_deg: 18
+      cue: One arm is doing more - curl both evenly
+      severity: cue
+
+- id: hammer_curl
+  name: Dumbbell Hammer Curl
+  category: upper_pull
+  primary_muscles: [biceps, brachialis]
+  equipment: [dumbbell]
+  position: standing
+  difficulty: beginner
+  preferred_view: front
+  setup: Dumbbells at your sides, palms facing each other.
+  cues:
+    - Neutral grip throughout - thumbs up
+    - Elbows stay pinned
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_elbow, left_wrist]
+    invert: true
+  criteria:
+    enter_threshold: 0.7
+    exit_threshold: 0.3
+    min_rep_s: 1.2
+  rules:
+    - type: torso_upright
+      max_lean_deg: 15
+      cue: Keep your torso still
+      severity: fault
+
+- id: overhead_tricep_extension
+  name: Overhead Tricep Extension
+  category: upper_push
+  primary_muscles: [triceps]
+  equipment: [dumbbell]
+  position: standing
+  difficulty: beginner
+  preferred_view: side
+  setup: One dumbbell held with both hands overhead.
+  cues:
+    - Only your forearms move - upper arms stay vertical
+    - Full stretch at the bottom
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_elbow, left_wrist]
+  criteria:
+    enter_threshold: 0.7
+    exit_threshold: 0.3
+    min_rep_s: 1.2
+
+# ----------------------------------------------------------------- lower / legs
+- id: goblet_squat
+  name: Goblet Squat
+  category: legs
+  primary_muscles: [quadriceps, gluteus_maximus]
+  secondary_muscles: [core]
+  equipment: [dumbbell]
+  position: standing
+  difficulty: beginner
+  glute_emphasis: 0.5
+  preferred_view: front
+  setup: One dumbbell held vertically at your chest. Camera in front.
+  cues:
+    - Sit down between your heels, chest tall
+    - Knees track out over your toes
+    - Go as deep as you can without your lower back rounding
+  signal:
+    kind: joint_angle
+    joints: [left_hip, left_knee, left_ankle]
+    invert: true
+  criteria:
+    enter_threshold: 0.62
+    exit_threshold: 0.28
+    min_rep_s: 1.4
+  rules:
+    - type: knee_tracking
+      side: left
+      max_deviation_m: 0.10
+      cue: Knees caving in - push them out over your toes
+    - type: knee_tracking
+      side: right
+      max_deviation_m: 0.10
+      cue: Knees caving in - push them out over your toes
+    - type: torso_upright
+      max_lean_deg: 35
+      cue: Chest up - you are folding forward
+    - type: symmetry
+      name: squat_symmetry
+      left_triplet: [left_hip, left_knee, left_ankle]
+      right_triplet: [right_hip, right_knee, right_ankle]
+      max_diff_deg: 12
+      cue: You are shifting to one side - load both legs evenly
+
+- id: calf_raise
+  name: Standing Calf Raise
+  category: legs
+  primary_muscles: [calves]
+  equipment: [dumbbell, bodyweight]
+  position: standing
+  difficulty: beginner
+  preferred_view: side
+  setup: Standing, optionally with dumbbells. Camera side-on, low.
+  cues:
+    - Rise all the way onto your toes
+    - Pause at the top, lower slowly
+  signal:
+    kind: height
+    joints: [left_heel]
+    reference: [left_foot_index]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.3
+    min_rep_s: 1.0
+    min_hold_s: 0.5
+
+- id: lateral_band_walk
+  name: Lateral Band Walk
+  category: glutes
+  primary_muscles: [gluteus_medius]
+  equipment: [band]
+  position: standing
+  difficulty: beginner
+  glute_emphasis: 0.85
+  preferred_view: front
+  setup: Band above your knees, quarter-squat position. Camera in front.
+  cues:
+    - Stay low the whole time
+    - Step wide, resist on the way back in
+    - Do not let your feet click together
+  signal:
+    kind: joint_distance
+    joints: [left_ankle, right_ankle]
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.3
+    min_rep_s: 0.8

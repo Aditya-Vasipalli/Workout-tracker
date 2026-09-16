@@ -1,0 +1,322 @@
+# Pilates. Mat-based, mostly bodyweight, heavy on control and stability.
+# Several of these are held or slow-tempo, which is why min_rep_s values are
+# long and hold requirements are common.
+
+- id: clamshell
+  name: Clamshell
+  category: pilates
+  primary_muscles: [gluteus_medius]
+  equipment: [mat, band]
+  position: side_lying
+  difficulty: beginner
+  glute_emphasis: 0.8
+  unilateral: true
+  preferred_view: front
+  setup: >
+    On your side, knees bent ~45 degrees, heels in line with your spine,
+    hips stacked. Camera facing your front, level with your hips.
+  cues:
+    - Keep your heels touching the whole time
+    - Do not let your top hip roll backward - that is the cheat
+    - Open from the hip, not by rocking your pelvis
+  signal:
+    kind: abduction
+    joints: ["{side}_hip", "{side}_knee"]
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.28
+    min_rep_s: 1.2
+    min_hold_s: 1.0
+  rules:
+    - type: stillness
+      name: hip_stable
+      joint: left_hip
+      max_drift_m: 0.05
+      cue: Your pelvis is rocking - keep it stacked and still
+      severity: fault
+
+- id: pilates_hundred
+  name: The Hundred
+  category: pilates
+  primary_muscles: [core]
+  secondary_muscles: [hip_flexors]
+  equipment: [mat]
+  position: supine
+  difficulty: intermediate
+  preferred_view: side
+  setup: >
+    On your back, head and shoulders curled up, legs at tabletop or extended.
+    Arms straight, pumping at your sides.
+  cues:
+    - Breathe in for five pumps, out for five
+    - Keep your lower back pressed into the mat
+    - Gaze at your navel, not the ceiling
+  signal:
+    kind: height
+    joints: [left_wrist]
+    reference: [left_hip]
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.3
+    min_rep_s: 0.3
+    max_rep_s: 5.0
+
+- id: pilates_bridge_rollup
+  name: Pilates Bridge Roll-Up
+  category: pilates
+  primary_muscles: [gluteus_maximus, core]
+  secondary_muscles: [erector_spinae, hamstrings]
+  equipment: [mat]
+  position: supine
+  difficulty: beginner
+  glute_emphasis: 0.7
+  preferred_view: side
+  setup: On your back, knees bent, feet flat, arms by your sides.
+  cues:
+    - Peel your spine off the mat one vertebra at a time
+    - Roll down the same way - slow and segmented
+    - This is about control, not height
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_hip, left_knee]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    min_rep_s: 3.0
+    min_hold_s: 1.0
+  rules:
+    - type: hip_extension
+      min_angle_deg: 160
+      severity: cue
+      cue: Lift until your body makes one long line from shoulders to knees
+
+- id: single_leg_circle
+  name: Single Leg Circle
+  category: pilates
+  primary_muscles: [core, hip_flexors]
+  secondary_muscles: [gluteus_medius]
+  equipment: [mat]
+  position: supine
+  difficulty: intermediate
+  unilateral: true
+  preferred_view: overhead
+  setup: On your back, one leg extended toward the ceiling, the other flat.
+  cues:
+    - Your pelvis must not move - only the leg travels
+    - Draw the circle with your big toe
+  signal:
+    kind: abduction
+    joints: ["{side}_hip", "{side}_ankle"]
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.3
+    min_rep_s: 2.0
+  rules:
+    - type: stillness
+      name: pelvis_still
+      joint: left_hip
+      max_drift_m: 0.04
+      cue: Your pelvis is shifting - shrink the circle until you can keep it still
+      severity: fault
+
+- id: swimming
+  name: Swimming
+  category: pilates
+  primary_muscles: [erector_spinae, gluteus_maximus]
+  secondary_muscles: [shoulders]
+  equipment: [mat]
+  position: prone
+  difficulty: intermediate
+  glute_emphasis: 0.6
+  preferred_view: side
+  setup: Face down, arms extended overhead, legs long.
+  cues:
+    - Lift opposite arm and leg, small and fast
+    - Length, not height - reach away from your centre
+  signal:
+    kind: height
+    joints: [left_ankle]
+    reference: [left_hip]
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.3
+    min_rep_s: 0.5
+
+- id: bird_dog
+  name: Bird Dog
+  category: pilates
+  primary_muscles: [core, erector_spinae]
+  secondary_muscles: [gluteus_maximus]
+  equipment: [mat]
+  position: quadruped
+  difficulty: beginner
+  glute_emphasis: 0.5
+  unilateral: true
+  preferred_view: side
+  setup: Hands and knees, back flat. Camera side-on.
+  cues:
+    - Extend opposite arm and leg to make one long line
+    - Imagine balancing a glass of water on your lower back
+    - Pause for two seconds at full extension
+  signal:
+    kind: joint_angle
+    joints: ["{side}_shoulder", "{side}_hip", "{side}_knee"]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    min_rep_s: 2.0
+    min_hold_s: 2.0
+  rules:
+    - type: spine_neutral
+      max_flexion_deg: 20
+      cue: Keep your back flat - no arching or sagging
+      severity: fault
+
+- id: side_lying_leg_lift
+  name: Side-Lying Leg Lift
+  category: pilates
+  primary_muscles: [gluteus_medius]
+  equipment: [mat, band]
+  position: side_lying
+  difficulty: beginner
+  glute_emphasis: 0.85
+  unilateral: true
+  preferred_view: front
+  setup: On your side, body in one straight line, bottom knee bent for balance.
+  cues:
+    - Lead with your heel, toes pointed slightly down
+    - Do not let your top hip roll forward
+    - Lift to about 45 degrees, no higher
+  signal:
+    kind: abduction
+    joints: ["{side}_hip", "{side}_ankle"]
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.28
+    min_rep_s: 1.2
+    min_hold_s: 0.5
+  rules:
+    - type: stillness
+      name: hip_stable
+      joint: left_hip
+      max_drift_m: 0.05
+      cue: Keep your pelvis stacked - you are rolling backward
+      severity: fault
+
+- id: plank
+  name: Plank
+  category: pilates
+  primary_muscles: [core]
+  secondary_muscles: [shoulders, gluteus_maximus]
+  equipment: [mat]
+  position: prone
+  difficulty: beginner
+  preferred_view: side
+  setup: Forearms under shoulders, body in one line. Camera side-on.
+  cues:
+    - Squeeze your glutes - that is what stops your hips sagging
+    - Do not let your hips pike up either
+    - Breathe
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_hip, left_knee]
+  criteria:
+    is_isometric: true
+    enter_threshold: 0.7
+    exit_threshold: 0.4
+    min_rep_s: 3.0
+    max_rep_s: 600.0
+  rules:
+    - type: spine_neutral
+      max_flexion_deg: 15
+      cue: Your hips are dropping - squeeze your glutes and lift them into line
+      severity: fault
+
+- id: side_plank
+  name: Side Plank
+  category: pilates
+  primary_muscles: [obliques, gluteus_medius]
+  equipment: [mat]
+  position: side_lying
+  difficulty: intermediate
+  glute_emphasis: 0.5
+  unilateral: true
+  preferred_view: front
+  setup: On your side, forearm under your shoulder, body in one line.
+  cues:
+    - Push the floor away - do not let your shoulder collapse
+    - Stack your hips, lift them toward the ceiling
+  signal:
+    kind: height
+    joints: [left_hip]
+    reference: [left_ankle]
+  criteria:
+    is_isometric: true
+    enter_threshold: 0.7
+    exit_threshold: 0.4
+    min_rep_s: 3.0
+    max_rep_s: 300.0
+
+- id: dead_bug
+  name: Dead Bug
+  category: pilates
+  primary_muscles: [core]
+  equipment: [mat]
+  position: supine
+  difficulty: beginner
+  unilateral: true
+  preferred_view: side
+  setup: On your back, arms up, knees at tabletop.
+  cues:
+    - Lower opposite arm and leg slowly
+    - Your lower back stays glued to the mat - that is the whole exercise
+  signal:
+    kind: joint_angle
+    joints: ["{side}_shoulder", "{side}_hip", "{side}_knee"]
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.3
+    min_rep_s: 2.0
+
+- id: roll_up
+  name: Roll Up
+  category: pilates
+  primary_muscles: [core]
+  equipment: [mat]
+  position: supine
+  difficulty: intermediate
+  preferred_view: side
+  setup: On your back, arms overhead, legs long.
+  cues:
+    - Peel up one vertebra at a time
+    - No momentum - if you have to throw your arms, regress it
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_hip, left_knee]
+    invert: true
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.3
+    min_rep_s: 3.0
+
+- id: pilates_teaser
+  name: Teaser
+  category: pilates
+  primary_muscles: [core, hip_flexors]
+  equipment: [mat]
+  position: supine
+  difficulty: advanced
+  preferred_view: side
+  setup: On your back, legs extended at 45 degrees, arms overhead.
+  cues:
+    - Roll up to balance on your sit bones in a V shape
+    - Control every inch - this is the hardest one in the mat repertoire
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_hip, left_knee]
+    invert: true
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.3
+    min_rep_s: 3.0
+    min_hold_s: 1.0

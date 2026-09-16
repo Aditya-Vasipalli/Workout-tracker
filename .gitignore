@@ -1,3 +1,9 @@
-/.venv
-/workout_reports
-/__pycache__
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+*.db
+gymbro_data/
+calibration/*.npz
