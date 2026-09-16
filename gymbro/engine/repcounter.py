@@ -118,6 +118,13 @@ class RepCounter:
         self._raw_window: list[float] = []
         self._partial_count = 0
 
+        # Attempts that moved but never reached `enter_threshold`. Without
+        # these, someone doing consistent half-reps sees a rep count of zero
+        # and no explanation at all.
+        self.rejections: list[tuple[str, float]] = []
+        self._excursion_peak = 0.0
+        self.shallow_attempts = 0
+
     # ------------------------------------------------------------------ range
 
     def seed_calibration(self, low: float, high: float) -> None:
@@ -170,6 +177,19 @@ class RepCounter:
                 self._peak_time = timestamp
                 self._hold_accum = 0.0
                 self._hold_start = None
+                self._excursion_peak = 0.0
+            else:
+                # Watch for movement that starts but never goes deep enough.
+                self._excursion_peak = max(self._excursion_peak, norm)
+                if norm <= self.exit_threshold and self._excursion_peak >= self.exit_threshold + 0.1:
+                    self.shallow_attempts += 1
+                    self.rejections.append((
+                        f"too shallow - you reached "
+                        f"{self._excursion_peak * 100:.0f}% of your range, "
+                        f"need {self.enter_threshold * 100:.0f}%",
+                        timestamp,
+                    ))
+                    self._excursion_peak = 0.0
 
         elif self.phase in (Phase.CONCENTRIC, Phase.HOLD):
             if norm > self._peak_value:
@@ -213,6 +233,10 @@ class RepCounter:
         if duration < self.min_rep_s:
             # Too fast to be a controlled rep -- almost always bounced momentum.
             self._partial_count += 1
+            self.rejections.append((
+                f"too fast ({duration:.1f}s) - slow down, you're using momentum",
+                timestamp,
+            ))
             self._reset_rep()
             return None
 
@@ -254,6 +278,7 @@ class RepCounter:
 
     def _abandon(self, reason: str) -> None:
         self._partial_count += 1
+        self.rejections.append((reason, self._rep_start or 0.0))
         self._reset_rep()
 
     def _reset_rep(self) -> None:
@@ -279,8 +304,29 @@ class RepCounter:
     def partial_count(self) -> int:
         return self._partial_count
 
+    def latest_rejection(self, since: float = 0.0) -> str | None:
+        """Most recent reason a movement did not count, for live feedback."""
+        for reason, t in reversed(self.rejections):
+            if t >= since:
+                return reason
+        return None
+
+    def rejection_summary(self) -> list[str]:
+        """Distinct reasons movements failed to count, most frequent first."""
+        counts: dict[str, int] = {}
+        for reason, _ in self.rejections:
+            key = reason.split(" - ")[0].split(" (")[0]
+            counts[key] = counts.get(key, 0) + 1
+        return [
+            f"{k} (x{v})" if v > 1 else k
+            for k, v in sorted(counts.items(), key=lambda kv: -kv[1])
+        ]
+
     def reset(self) -> None:
         self.reps.clear()
+        self.rejections.clear()
+        self.shallow_attempts = 0
+        self._excursion_peak = 0.0
         self._partial_count = 0
         self._reset_rep()
         self._raw_window.clear()

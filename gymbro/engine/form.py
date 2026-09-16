@@ -201,6 +201,7 @@ def hip_above_line(
     min_angle_deg: float = 165.0,
     cue: str = "Squeeze your glutes and finish the lockout - shoulder, hip, knee in one line",
     severity: Severity = Severity.CUE,
+    phase: str | None = "peak",
 ) -> FormRule:
     """Full hip extension at the top of a bridge/thrust."""
     joints = ("left_shoulder", "left_hip", "left_knee")
@@ -216,6 +217,7 @@ def hip_above_line(
         name=name, joints=("left_shoulder", "right_shoulder", "left_hip", "right_hip",
                            "left_knee", "right_knee"),
         check=check, target=f">={min_angle_deg:.0f} deg", cue=cue, severity=severity,
+        phase=phase,
     )
 
 
@@ -328,5 +330,29 @@ class FormReport:
         return None
 
 
+def rule_applies(rule: FormRule, context: dict) -> bool:
+    """Whether a phase-scoped rule should run on this frame.
+
+    A lockout check must only fire at the top of the rep -- evaluating it at the
+    bottom, where failing it is simply what the bottom of a rep looks like,
+    would drag the score down for correct technique.
+    """
+    if rule.phase in (None, "any"):
+        return True
+    norm = context.get("normalized")
+    if norm is None:
+        return True
+    if rule.phase == "peak":
+        return norm >= 0.80
+    if rule.phase == "bottom":
+        return norm <= 0.20
+    if rule.phase == "moving":
+        return 0.20 < norm < 0.80
+    return True
+
+
 def evaluate_rules(rules: list[FormRule], pose: Pose, context: dict | None = None) -> FormReport:
-    return FormReport([rule.evaluate(pose, context) for rule in rules])
+    context = context or {}
+    return FormReport([
+        rule.evaluate(pose, context) for rule in rules if rule_applies(rule, context)
+    ])

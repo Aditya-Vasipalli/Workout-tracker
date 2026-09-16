@@ -189,6 +189,8 @@ def build_rule(spec: dict) -> FormRule:
 
     if "severity" in spec:
         spec["severity"] = Severity(spec["severity"])
+    if spec.get("phase") not in (None, "any", "peak", "bottom", "moving"):
+        raise ValueError(f"bad rule phase: {spec['phase']!r}")
     for key in ("triplet", "left_triplet", "right_triplet"):
         if key in spec:
             spec[key] = tuple(spec[key])
