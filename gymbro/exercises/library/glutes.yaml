@@ -1,0 +1,553 @@
+# Glute-focused work. Deliberately the largest and most carefully specified
+# file in the library: these are the priority movements.
+#
+# glute_emphasis drives programming weight (0-1). Values reflect how much of the
+# movement's total stimulus lands on the glutes rather than quads/hamstrings.
+
+- id: glute_bridge
+  name: Glute Bridge
+  category: glutes
+  primary_muscles: [gluteus_maximus]
+  secondary_muscles: [hamstrings, erector_spinae]
+  equipment: [bodyweight, mat]
+  position: supine
+  difficulty: beginner
+  glute_emphasis: 0.85
+  preferred_view: side
+  aliases: [bridge, hip_bridge]
+  setup: >
+    Lie on your back, knees bent, feet flat about hip-width and close enough
+    that your fingertips brush your heels. Camera at hip height, side-on.
+  cues:
+    - Push through your heels, not your toes
+    - Squeeze your glutes at the top - don't arch your lower back to get higher
+    - Ribs stay down
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_hip, left_knee]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    full_range_threshold: 0.85
+    min_rep_s: 1.2
+    min_hold_s: 1.0
+  rules:
+    - type: hip_extension
+      min_angle_deg: 165
+      severity: cue
+    - type: symmetry
+      name: hip_symmetry
+      left_triplet: [left_shoulder, left_hip, left_knee]
+      right_triplet: [right_shoulder, right_hip, right_knee]
+      max_diff_deg: 12
+      cue: One hip is lifting higher than the other - level your pelvis
+    - type: joint_angle_range
+      name: knee_angle
+      triplet: [left_hip, left_knee, left_ankle]
+      lo: 70
+      hi: 110
+      cue: Walk your feet closer or further - aim for about 90 degrees at the knee
+      severity: cue
+  progressions: [single_leg_glute_bridge, hip_thrust, banded_glute_bridge]
+
+- id: banded_glute_bridge
+  name: Banded Glute Bridge
+  category: glutes
+  primary_muscles: [gluteus_maximus, gluteus_medius]
+  equipment: [band, mat]
+  position: supine
+  difficulty: beginner
+  glute_emphasis: 0.9
+  preferred_view: angled_45
+  setup: Loop band just above your knees. Same setup as a glute bridge.
+  cues:
+    - Press your knees out against the band the whole time
+    - Don't let the band win on the way down
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_hip, left_knee]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    min_rep_s: 1.2
+    min_hold_s: 1.0
+  rules:
+    - type: hip_extension
+      min_angle_deg: 165
+      severity: cue
+    - type: symmetry
+      name: hip_symmetry
+      left_triplet: [left_shoulder, left_hip, left_knee]
+      right_triplet: [right_shoulder, right_hip, right_knee]
+      max_diff_deg: 12
+      cue: Level your pelvis - one side is doing more work
+    - type: knee_tracking
+      side: left
+      max_deviation_m: 0.07
+      cue: Knees are collapsing in - drive them out into the band
+    - type: knee_tracking
+      side: right
+      max_deviation_m: 0.07
+      cue: Knees are collapsing in - drive them out into the band
+
+- id: hip_thrust
+  name: Dumbbell Hip Thrust
+  category: glutes
+  primary_muscles: [gluteus_maximus]
+  secondary_muscles: [hamstrings, quadriceps]
+  equipment: [dumbbell, bench]
+  position: supine
+  difficulty: intermediate
+  glute_emphasis: 0.95
+  preferred_view: side
+  setup: >
+    Upper back on a bench or sofa edge, dumbbell across your hips (pad it).
+    Feet flat, shins vertical at the top. Camera side-on at hip height.
+  cues:
+    - Chin tucked, ribs down - look forward, not up
+    - Drive through your heels until your torso is parallel to the floor
+    - Two second squeeze at the top
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_hip, left_knee]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    full_range_threshold: 0.88
+    min_rep_s: 1.5
+    min_hold_s: 2.0
+  rules:
+    - type: hip_extension
+      min_angle_deg: 170
+      cue: Finish the lockout - squeeze until your hips are fully extended
+      severity: cue
+    - type: symmetry
+      name: hip_symmetry
+      left_triplet: [left_shoulder, left_hip, left_knee]
+      right_triplet: [right_shoulder, right_hip, right_knee]
+      max_diff_deg: 10
+      cue: Your pelvis is tilting - push evenly through both heels
+    - type: joint_angle_range
+      name: shin_vertical
+      triplet: [left_hip, left_knee, left_ankle]
+      lo: 75
+      hi: 105
+      cue: Shins should be vertical at the top - adjust your foot position
+      severity: cue
+  regressions: [glute_bridge]
+  progressions: [single_leg_hip_thrust]
+
+- id: single_leg_glute_bridge
+  name: Single-Leg Glute Bridge
+  category: glutes
+  primary_muscles: [gluteus_maximus]
+  secondary_muscles: [hamstrings, core]
+  equipment: [bodyweight, mat]
+  position: supine
+  difficulty: intermediate
+  glute_emphasis: 0.9
+  unilateral: true
+  preferred_view: side
+  setup: Glute bridge setup, one leg extended straight or knee pulled to chest.
+  cues:
+    - Keep your hips square - the free side wants to drop
+    - Push through the heel of the working leg
+  signal:
+    kind: joint_angle
+    joints: ["{side}_shoulder", "{side}_hip", "{side}_knee"]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    min_rep_s: 1.2
+    min_hold_s: 1.0
+  rules:
+    - type: symmetry
+      name: pelvis_level
+      left_triplet: [left_shoulder, left_hip, left_knee]
+      right_triplet: [right_shoulder, right_hip, right_knee]
+      max_diff_deg: 25
+      cue: Your free hip is dropping - keep the pelvis level
+      severity: fault
+  regressions: [glute_bridge]
+
+- id: single_leg_hip_thrust
+  name: Single-Leg Hip Thrust
+  category: glutes
+  primary_muscles: [gluteus_maximus]
+  equipment: [bench, bodyweight]
+  position: supine
+  difficulty: advanced
+  glute_emphasis: 0.95
+  unilateral: true
+  preferred_view: side
+  setup: Hip thrust setup with one foot planted, other leg lifted.
+  cues:
+    - Square your hips before you move
+    - Full lockout, two second squeeze
+  signal:
+    kind: joint_angle
+    joints: ["{side}_shoulder", "{side}_hip", "{side}_knee"]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    min_rep_s: 1.5
+    min_hold_s: 1.5
+  rules:
+    - type: symmetry
+      name: pelvis_level
+      left_triplet: [left_shoulder, left_hip, left_knee]
+      right_triplet: [right_shoulder, right_hip, right_knee]
+      max_diff_deg: 25
+      cue: Keep the pelvis level - don't let the free side sag
+  regressions: [single_leg_glute_bridge, hip_thrust]
+
+- id: romanian_deadlift
+  name: Dumbbell Romanian Deadlift
+  category: glutes
+  primary_muscles: [gluteus_maximus, hamstrings]
+  secondary_muscles: [erector_spinae]
+  equipment: [dumbbell]
+  position: hinge
+  difficulty: intermediate
+  glute_emphasis: 0.7
+  preferred_view: side
+  setup: >
+    Dumbbells in front of your thighs, feet hip-width, soft knees.
+    Camera side-on at hip height, far enough back to see head to feet.
+  cues:
+    - Push your hips back, don't bend your knees more
+    - Dumbbells stay close - they should brush your legs
+    - Stop when you feel your hamstrings stretch, not when you can't go lower
+    - Long spine the whole way - no rounding
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_hip, left_knee]
+    invert: true
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.28
+    full_range_threshold: 0.80
+    min_rep_s: 2.0
+  rules:
+    - type: spine_neutral
+      max_flexion_deg: 22
+      cue: Your lower back is rounding - shorten the range and keep a long spine
+      severity: unsafe
+    - type: joint_angle_range
+      name: knee_softness
+      triplet: [left_hip, left_knee, left_ankle]
+      lo: 150
+      hi: 178
+      cue: This is a hinge, not a squat - keep your knees softly fixed
+  regressions: [glute_bridge]
+
+- id: bulgarian_split_squat
+  name: Bulgarian Split Squat
+  category: glutes
+  primary_muscles: [gluteus_maximus, quadriceps]
+  secondary_muscles: [adductors, core]
+  equipment: [dumbbell, bench]
+  position: standing
+  difficulty: advanced
+  glute_emphasis: 0.65
+  unilateral: true
+  preferred_view: side
+  setup: >
+    Rear foot on a bench or sofa, front foot a long stride forward.
+    The longer the stride, the more glute. Camera side-on.
+  cues:
+    - Lean your torso forward slightly - that's what shifts it to glutes
+    - Front knee tracks over your middle toe
+    - Drive through the whole front foot
+  signal:
+    kind: joint_angle
+    joints: ["{side}_hip", "{side}_knee", "{side}_ankle"]
+    invert: true
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    min_rep_s: 1.5
+  rules:
+    - type: knee_tracking
+      side: left
+      max_deviation_m: 0.09
+      cue: Front knee is caving in - push it out over your middle toe
+    - type: spine_neutral
+      max_flexion_deg: 30
+      cue: Forward lean is fine, rounding is not - keep a long spine
+      severity: fault
+  regressions: [reverse_lunge, glute_bridge]
+
+- id: reverse_lunge
+  name: Dumbbell Reverse Lunge
+  category: glutes
+  primary_muscles: [gluteus_maximus, quadriceps]
+  equipment: [dumbbell]
+  position: standing
+  difficulty: beginner
+  glute_emphasis: 0.6
+  unilateral: true
+  preferred_view: side
+  setup: Dumbbells at your sides, feet hip-width. Step backward, not forward.
+  cues:
+    - Step back and down, not back and out
+    - Front shin stays roughly vertical
+    - Push through the front heel to stand up
+  signal:
+    kind: joint_angle
+    joints: ["{side}_hip", "{side}_knee", "{side}_ankle"]
+    invert: true
+  criteria:
+    enter_threshold: 0.62
+    exit_threshold: 0.28
+    min_rep_s: 1.2
+  rules:
+    - type: knee_tracking
+      side: left
+      max_deviation_m: 0.09
+      cue: Front knee is caving - drive it out over your toe
+    - type: torso_upright
+      max_lean_deg: 30
+      cue: Stay tall through your chest
+      severity: cue
+  progressions: [bulgarian_split_squat]
+
+- id: glute_kickback
+  name: Quadruped Glute Kickback
+  category: glutes
+  primary_muscles: [gluteus_maximus]
+  equipment: [bodyweight, band, mat]
+  position: quadruped
+  difficulty: beginner
+  glute_emphasis: 0.9
+  unilateral: true
+  preferred_view: side
+  setup: >
+    Hands and knees, back flat. Camera side-on at hip height.
+    Add a band around your thighs or a dumbbell behind your knee to load it.
+  cues:
+    - Drive your heel toward the ceiling, not your foot backward
+    - Stop when your thigh is in line with your torso - don't arch your back for height
+    - Keep your hips square to the floor
+  signal:
+    kind: joint_angle
+    joints: ["{side}_shoulder", "{side}_hip", "{side}_knee"]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    min_rep_s: 1.0
+    min_hold_s: 0.5
+  rules:
+    - type: spine_neutral
+      max_flexion_deg: 25
+      cue: You're arching your back to get higher - lower the leg, keep the spine still
+      severity: fault
+
+- id: fire_hydrant
+  name: Fire Hydrant
+  category: glutes
+  primary_muscles: [gluteus_medius]
+  secondary_muscles: [gluteus_maximus]
+  equipment: [bodyweight, band, mat]
+  position: quadruped
+  difficulty: beginner
+  glute_emphasis: 0.85
+  unilateral: true
+  preferred_view: front
+  setup: Hands and knees, knee bent at 90 degrees. Camera in front or behind.
+  cues:
+    - Lift your knee out to the side, keeping the 90 degree bend
+    - Don't let your torso rotate away - the movement is at the hip only
+  signal:
+    kind: abduction
+    joints: ["{side}_hip", "{side}_knee"]
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.28
+    min_rep_s: 0.9
+    min_hold_s: 0.5
+  rules:
+    - type: joint_angle_range
+      name: knee_bend
+      triplet: [left_hip, left_knee, left_ankle]
+      lo: 70
+      hi: 110
+      cue: Keep the 90 degree bend in your knee
+      severity: cue
+
+- id: donkey_kick
+  name: Donkey Kick
+  category: glutes
+  primary_muscles: [gluteus_maximus]
+  equipment: [bodyweight, band, mat]
+  position: quadruped
+  difficulty: beginner
+  glute_emphasis: 0.88
+  unilateral: true
+  preferred_view: side
+  setup: Hands and knees, knee bent 90 degrees, sole of the foot toward the ceiling.
+  cues:
+    - Press your heel up like a footprint on the ceiling
+    - Squeeze at the top, don't swing
+  signal:
+    kind: joint_angle
+    joints: ["{side}_shoulder", "{side}_hip", "{side}_knee"]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    min_rep_s: 1.0
+    min_hold_s: 0.5
+  rules:
+    - type: spine_neutral
+      max_flexion_deg: 25
+      cue: Stop arching your back for extra height
+      severity: fault
+
+- id: frog_pump
+  name: Frog Pump
+  category: glutes
+  primary_muscles: [gluteus_maximus]
+  equipment: [bodyweight, mat, dumbbell]
+  position: supine
+  difficulty: beginner
+  glute_emphasis: 0.92
+  preferred_view: side
+  setup: >
+    On your back, soles of your feet together, knees falling out wide
+    (like a frog). Heels close to your body. Camera side-on.
+  cues:
+    - Keep the soles of your feet pressed together
+    - Short, sharp squeezes - this one is about the contraction, not the range
+  signal:
+    kind: joint_angle
+    joints: [left_shoulder, left_hip, left_knee]
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.28
+    full_range_threshold: 0.8
+    min_rep_s: 0.8
+    min_hold_s: 0.5
+
+- id: step_up
+  name: Dumbbell Step-Up
+  category: glutes
+  primary_muscles: [gluteus_maximus, quadriceps]
+  equipment: [dumbbell, bench]
+  position: standing
+  difficulty: intermediate
+  glute_emphasis: 0.7
+  unilateral: true
+  preferred_view: side
+  setup: Sturdy chair or bench, knee-height or a bit lower. Dumbbells at your sides.
+  cues:
+    - Push through the top foot - don't push off the bottom one
+    - Control the way down, don't drop
+  signal:
+    kind: joint_angle
+    joints: ["{side}_hip", "{side}_knee", "{side}_ankle"]
+  criteria:
+    enter_threshold: 0.65
+    exit_threshold: 0.30
+    min_rep_s: 1.5
+  rules:
+    - type: knee_tracking
+      side: left
+      max_deviation_m: 0.09
+      cue: Working knee is caving in - drive it out
+
+- id: sumo_squat
+  name: Dumbbell Sumo Squat
+  category: glutes
+  primary_muscles: [gluteus_maximus, adductors]
+  secondary_muscles: [quadriceps]
+  equipment: [dumbbell]
+  position: standing
+  difficulty: beginner
+  glute_emphasis: 0.65
+  preferred_view: front
+  setup: >
+    Feet wider than shoulders, toes turned out ~30 degrees.
+    One dumbbell held vertically between your legs. Camera in front.
+  cues:
+    - Knees track out in line with your toes
+    - Sit straight down between your heels
+    - Squeeze your glutes at the top
+  signal:
+    kind: joint_angle
+    joints: [left_hip, left_knee, left_ankle]
+    invert: true
+  criteria:
+    enter_threshold: 0.62
+    exit_threshold: 0.28
+    min_rep_s: 1.4
+  rules:
+    - type: knee_tracking
+      side: left
+      max_deviation_m: 0.10
+      cue: Knees caving in - push them out in line with your toes
+    - type: knee_tracking
+      side: right
+      max_deviation_m: 0.10
+      cue: Knees caving in - push them out in line with your toes
+    - type: torso_upright
+      max_lean_deg: 30
+      cue: Chest up - you're tipping forward
+    - type: symmetry
+      name: squat_symmetry
+      left_triplet: [left_hip, left_knee, left_ankle]
+      right_triplet: [right_hip, right_knee, right_ankle]
+      max_diff_deg: 12
+      cue: You're shifting to one side - load both legs evenly
+
+- id: curtsy_lunge
+  name: Curtsy Lunge
+  category: glutes
+  primary_muscles: [gluteus_medius, gluteus_maximus]
+  equipment: [dumbbell, bodyweight]
+  position: standing
+  difficulty: intermediate
+  glute_emphasis: 0.8
+  unilateral: true
+  preferred_view: front
+  setup: Standing, step one leg diagonally behind and across the other.
+  cues:
+    - Step back and across, like a curtsy
+    - Keep your hips facing forward
+    - Front knee stays over your toe
+  signal:
+    kind: joint_angle
+    joints: ["{side}_hip", "{side}_knee", "{side}_ankle"]
+    invert: true
+  criteria:
+    enter_threshold: 0.6
+    exit_threshold: 0.28
+    min_rep_s: 1.3
+  rules:
+    - type: torso_upright
+      max_lean_deg: 28
+      cue: Stay tall - don't fold forward
+      severity: cue
+
+- id: wall_sit
+  name: Wall Sit
+  category: glutes
+  primary_muscles: [quadriceps, gluteus_maximus]
+  equipment: [bodyweight]
+  position: standing
+  difficulty: beginner
+  glute_emphasis: 0.5
+  preferred_view: side
+  setup: Back flat against a wall, slide down to 90 degrees at the knees.
+  cues:
+    - Thighs parallel to the floor
+    - Push your whole back into the wall
+  signal:
+    kind: joint_angle
+    joints: [left_hip, left_knee, left_ankle]
+    invert: true
+  criteria:
+    is_isometric: true
+    enter_threshold: 0.7
+    exit_threshold: 0.4
+    min_rep_s: 3.0
+    max_rep_s: 300.0
