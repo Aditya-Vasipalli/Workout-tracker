@@ -155,6 +155,10 @@ def accrue_missed_days(
 # ------------------------------------------------------------- progression
 
 
+# Beyond this, adding sets stops being training and starts being a time sink.
+MAX_SETS = 5
+
+
 @dataclass
 class ProgressionDecision:
     load_kg: float | None
@@ -163,6 +167,8 @@ class ProgressionDecision:
     consecutive_clears: int
     changed: bool
     message: str
+    # Set when the exercise has run out of room and a harder variant is due.
+    graduate_to: str | None = None
 
 
 def next_prescription(
@@ -178,6 +184,7 @@ def next_prescription(
     rep_floor: int = 8,
     load_increment_kg: float = 2.0,
     available_loads: tuple[float, ...] | None = None,
+    progressions: tuple[str, ...] = (),
 ) -> ProgressionDecision:
     """Double progression, gated on verified reps *and* form.
 
@@ -217,10 +224,25 @@ def next_prescription(
 
     new_load = _next_load(current_load_kg, load_increment_kg, available_loads)
     if new_load is None:
-        # Out of load: add volume instead of stalling.
+        # Out of load. Add a set, but only up to a point -- past MAX_SETS the
+        # honest answer is that you have outgrown the movement, not that you
+        # should spend another ten minutes on it.
+        if target_sets < MAX_SETS:
+            return ProgressionDecision(
+                current_load_kg, rep_ceiling, target_sets + 1, 0, True,
+                f"No heavier load available - adding a {target_sets + 1}th set instead.",
+            )
+        if progressions:
+            return ProgressionDecision(
+                current_load_kg, rep_ceiling, target_sets, 0, True,
+                f"You have outgrown this one at {target_sets}x{rep_ceiling}. "
+                f"Time to move to a harder variant.",
+                graduate_to=progressions[0],
+            )
         return ProgressionDecision(
-            current_load_kg, rep_ceiling, target_sets + 1, 0, True,
-            f"No heavier dumbbell available - adding a {target_sets + 1}th set instead.",
+            current_load_kg, rep_ceiling, target_sets, 0, False,
+            f"Maxed out at {target_sets}x{rep_ceiling} with no load to add and no "
+            f"harder variant on file - slow the tempo or add a pause instead.",
         )
 
     return ProgressionDecision(

@@ -141,3 +141,33 @@ class TestProgression:
             last_good_reps=12, last_prescribed_reps=12, last_form_score=0.9,
         )
         assert d.target_reps == 13 and d.load_kg is None
+
+
+class TestVolumeCeiling:
+    def _maxed(self, sets, progressions=()):
+        return next_prescription(
+            current_load_kg=None, target_reps=15, target_sets=sets,
+            consecutive_clears=1, last_good_reps=15, last_prescribed_reps=15,
+            last_form_score=0.95, progressions=progressions,
+        )
+
+    def test_bodyweight_adds_sets_up_to_the_cap(self):
+        d = self._maxed(3)
+        assert d.target_sets == 4 and d.changed
+
+    def test_sets_stop_at_the_cap(self):
+        from gymbro.program.accountability import MAX_SETS
+        d = self._maxed(MAX_SETS)
+        assert d.target_sets == MAX_SETS
+
+    def test_maxed_out_exercise_graduates_to_a_harder_variant(self):
+        from gymbro.program.accountability import MAX_SETS
+        d = self._maxed(MAX_SETS, progressions=("single_leg_glute_bridge",))
+        assert d.graduate_to == "single_leg_glute_bridge"
+        assert "outgrown" in d.message
+
+    def test_no_variant_available_suggests_tempo_instead(self):
+        from gymbro.program.accountability import MAX_SETS
+        d = self._maxed(MAX_SETS)
+        assert d.graduate_to is None
+        assert "tempo" in d.message

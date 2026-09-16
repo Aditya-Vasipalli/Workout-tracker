@@ -138,13 +138,16 @@ class WorkoutGenerator:
         debt: int = 0,
         day_index: int | None = None,
         progression_lookup=None,
+        exclude_ids: set[str] | None = None,
     ) -> DayPlan:
         recent_volume = recent_volume or {}
         idx = day_index if day_index is not None else plan_date.toordinal() % len(ROTATION)
         name, focus = ROTATION[idx % len(ROTATION)]
 
         plan = DayPlan(plan_date=plan_date.isoformat(), name=name, focus=focus)
-        chosen: set[str] = set()
+        # Exercises you have graduated out of are excluded by seeding `chosen`,
+        # which every selector already filters against.
+        chosen: set[str] = set(exclude_ids or ())
 
         builder = {
             "glutes": self._build_glute_day,

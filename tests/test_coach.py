@@ -146,3 +146,85 @@ class TestPlanning:
         bad.tracking_quality = 0.3
         coach.record_set(sid, bad, set_index=1)
         assert coach.store.get_calibration(plan.blocks[0].exercise_id, "") is None
+
+
+class TestUnilateralAccounting:
+    """Left and right are separate blocks; sets must not compound across sides."""
+
+    def test_set_count_does_not_double_for_unilateral_work(self, coach):
+        day = date(2026, 9, 16)
+        plan = coach.plan_for(day)
+        unilateral = [b for b in plan.blocks if b.side]
+        assert unilateral, "expected some unilateral work in the plan"
+        target = unilateral[0]
+        prescribed_per_side = target.sets
+
+        sid = coach.start_session(plan)
+        for block in plan.blocks:
+            for s in range(block.sets):
+                coach.record_set(
+                    sid, fake_set(block.exercise_id, block.reps, block.reps,
+                                  side=block.side),
+                    set_index=s + 1,
+                )
+        coach.finish_session(sid, day)
+
+        stored = coach.store.get_progression(target.exercise_id)
+        assert stored["target_sets"] == prescribed_per_side, (
+            f"sets per side inflated from {prescribed_per_side} "
+            f"to {stored['target_sets']}"
+        )
+
+    def test_sets_stay_bounded_over_many_weeks(self, coach):
+        """The real symptom: runaway volume after repeated sessions."""
+        day = date(2026, 9, 16)
+        for week in range(5):
+            run_day(coach, day + timedelta(days=week * 6))
+        for row in coach.store._conn.execute("SELECT * FROM progression"):
+            assert row["target_sets"] <= 6, (
+                f"{row['exercise_id']} ballooned to {row['target_sets']} sets"
+            )
+
+
+class TestGraduation:
+    """Outgrowing a movement should change the program, not just print a note."""
+
+    def _max_out(self, coach, exercise_id, day):
+        from gymbro.program.accountability import MAX_SETS
+        coach.store.upsert_progression(
+            exercise_id, load_kg=None, target_reps=15, target_sets=MAX_SETS,
+            consecutive_clears=1, unlocked=1,
+        )
+
+    def test_maxed_bodyweight_exercise_graduates(self, coach):
+        day = date(2026, 9, 16)
+        self._max_out(coach, "glute_bridge", day)
+
+        sid = coach.start_session(coach.plan_for(day))
+        coach.record_set(sid, fake_set("glute_bridge", 15, 15), set_index=1)
+        out = coach.finish_session(sid, day)
+
+        assert any("outgrown" in n for n in out["progression"]), out["progression"]
+        assert "glute_bridge" in coach.graduated_exercises()
+
+    def test_harder_variant_is_seeded_sanely(self, coach):
+        day = date(2026, 9, 16)
+        self._max_out(coach, "glute_bridge", day)
+        sid = coach.start_session(coach.plan_for(day))
+        coach.record_set(sid, fake_set("glute_bridge", 15, 15), set_index=1)
+        coach.finish_session(sid, day)
+
+        seeded = coach.store.get_progression("single_leg_glute_bridge")
+        assert seeded is not None
+        assert seeded["target_reps"] == 8 and seeded["target_sets"] == 3
+
+    def test_graduated_exercise_stops_being_prescribed(self, coach):
+        day = date(2026, 9, 16)
+        self._max_out(coach, "glute_bridge", day)
+        sid = coach.start_session(coach.plan_for(day))
+        coach.record_set(sid, fake_set("glute_bridge", 15, 15), set_index=1)
+        coach.finish_session(sid, day)
+
+        for i in range(1, 13):
+            plan = coach.plan_for(day + timedelta(days=i), regenerate=True)
+            assert all(b.exercise_id != "glute_bridge" for b in plan.blocks)

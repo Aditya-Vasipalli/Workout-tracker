@@ -248,8 +248,8 @@
     - Stack your hips, lift them toward the ceiling
   signal:
     kind: height
-    joints: [left_hip]
-    reference: [left_ankle]
+    joints: ["{side}_hip"]
+    reference: ["{side}_ankle"]
   criteria:
     is_isometric: true
     enter_threshold: 0.7

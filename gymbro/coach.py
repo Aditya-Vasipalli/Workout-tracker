@@ -73,6 +73,7 @@ class Coach:
             recent_volume=self.store.muscle_volume(since=date.fromordinal(day.toordinal() - 10)),
             debt=state.debt,
             progression_lookup=self._progression_for,
+            exclude_ids=self.graduated_exercises(),
         )
         self.store.save_plan(day.isoformat(), plan.to_dict())
         return plan
@@ -80,6 +81,15 @@ class Coach:
     def _progression_for(self, exercise_id: str) -> dict | None:
         row = self.store.get_progression(exercise_id)
         return dict(row) if row else None
+
+    def graduated_exercises(self) -> set[str]:
+        """Movements you have outgrown; the generator stops prescribing them."""
+        return {
+            r["exercise_id"]
+            for r in self.store._conn.execute(
+                "SELECT exercise_id FROM progression WHERE unlocked = 0"
+            )
+        }
 
     # -------------------------------------------------------------- sessions
 
@@ -146,24 +156,46 @@ class Coach:
             current = self._progression_for(exercise_id) or {}
             scores = [r["form_score"] for r in records if r["form_score"] is not None]
 
+            # Unilateral work is logged as one record per side per set, but
+            # `target_sets` means sets *per side* -- the generator applies it to
+            # the left and right blocks separately. Counting both sides here
+            # would double the prescription every session.
+            sides = {r["side"] for r in records}
+            sets_per_side = max(1, len(records) // max(1, len(sides)))
+
             decision = next_prescription(
                 current_load_kg=current.get("load_kg"),
                 target_reps=current.get("target_reps", records[0]["target_reps"]),
-                target_sets=current.get("target_sets", len(records)),
+                target_sets=current.get("target_sets", sets_per_side),
                 consecutive_clears=current.get("consecutive_clears", 0),
                 last_good_reps=sum(r["good_reps"] for r in records),
                 last_prescribed_reps=sum(r["target_reps"] for r in records),
                 last_form_score=(sum(scores) / len(scores)) if scores else None,
                 available_loads=self.config.available_loads or None,
+                progressions=get_exercise(exercise_id).progressions,
             )
             self.store.upsert_progression(
                 exercise_id,
                 load_kg=decision.load_kg, target_reps=decision.target_reps,
                 target_sets=decision.target_sets,
                 consecutive_clears=decision.consecutive_clears,
+                unlocked=0 if decision.graduate_to else 1,
             )
-            if decision.changed:
-                notes.append(f"{get_exercise(exercise_id).name}: {decision.message}")
+
+            if decision.graduate_to:
+                # Seed the harder variant so it starts at a sane prescription
+                # rather than inheriting a maxed-out one.
+                harder = get_exercise(decision.graduate_to)
+                if self.store.get_progression(harder.id) is None:
+                    self.store.upsert_progression(
+                        harder.id, load_kg=None, target_reps=8,
+                        target_sets=3, consecutive_clears=0, unlocked=1,
+                    )
+            if decision.changed or decision.graduate_to:
+                note = f"{get_exercise(exercise_id).name}: {decision.message}"
+                if decision.graduate_to:
+                    note += f" -> {get_exercise(decision.graduate_to).name}"
+                notes.append(note)
 
         return notes
 
