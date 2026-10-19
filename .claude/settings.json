@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Notion__notion-fetch",
+      "mcp__Notion__notion-search",
+      "mcp__Notion__notion-update-page",
+      "mcp__Notion__notion-create-pages",
+      "mcp__Notion__notion-update-data-source",
+      "mcp__Notion__notion-create-database",
+      "mcp__Notion__notion-create-view",
+      "mcp__Notion__notion-update-view",
+      "mcp__Notion__notion-query-data-sources",
+      "mcp__Notion__notion-create-file-upload",
+      "mcp__Notion__notion-create-attachment",
+      "mcp__Notion__notion-get-async-task"
+    ]
+  }
+}
